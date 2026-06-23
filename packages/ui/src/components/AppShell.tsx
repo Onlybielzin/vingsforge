@@ -12,11 +12,13 @@ import { RightPanel } from './RightPanel.js';
 import { ApiKeyOnboarding } from './ApiKeyOnboarding.js';
 import { SettingsScreen } from './SettingsScreen.js';
 import { UpdateBanner, UpdateModal } from './UpdatePanel.js';
+import { ExternalSessionsModal } from './ExternalSessionsModal.js';
 import { Icon } from './Icon.js';
 
 export function AppShell(): JSX.Element {
   const store = useStore();
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const updateAvailable = store.updateStatus?.available ?? false;
   const activeProject = store.projects.find((p) => p.id === store.activeProjectId) ?? null;
   const activeChat = store.chats.find((c) => c.id === store.activeChatId) ?? null;
@@ -65,6 +67,14 @@ export function AppShell(): JSX.Element {
     )}
     {updateOpen && (
       <UpdateModal ipc={store.ipc} status={store.updateStatus} onClose={() => setUpdateOpen(false)} />
+    )}
+    {sessionsOpen && (
+      <ExternalSessionsModal
+        ipc={store.ipc}
+        projectId={store.activeProjectId}
+        onContinue={(sessionId) => store.importExternalSession(sessionId)}
+        onClose={() => setSessionsOpen(false)}
+      />
     )}
     <div style={shellCol}>
     {updateAvailable && store.updateStatus ? (
@@ -115,6 +125,7 @@ export function AppShell(): JSX.Element {
             chats={store.chats}
             onSelectChat={(id) => void store.selectChat(id)}
             onNewChat={() => void store.newChat()}
+            onContinueClaudeSession={() => setSessionsOpen(true)}
           />
         )}
       </main>

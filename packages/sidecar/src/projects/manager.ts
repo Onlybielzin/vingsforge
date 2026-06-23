@@ -4,10 +4,18 @@
  * with optional file deletion. Implements the {@link ProjectsAPI} contract.
  */
 import { spawn } from 'node:child_process';
-import { isAbsolute } from 'node:path';
+import { open, readdir, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
+import {
+  encodeProjectDir,
+  isSessionId,
+  parseSessionPreview,
+} from './external-sessions.js';
 import type {
   ChatSummary,
+  ExternalSession,
   PermissionPolicy,
   Project,
   ProjectsAPI,
@@ -247,6 +255,136 @@ export class ProjectManager implements ProjectsAPI {
     return parseWorktreePorcelain(stdout);
   }
 
+  /**
+   * List the Claude Code CLI sessions started OUTSIDE the app for this project's
+   * local workspace (Spec: continue terminal sessions). Remote workspaces have no
+   * local transcript folder, so they return `[]`.
+   *
+   * Resolves `~/.claude/projects/<encode(workspace.path)>/`, lists its `*.jsonl`
+   * files newest-first by mtime, and builds an {@link ExternalSession} per file.
+   * Only the first {@link PREVIEW_LINES} lines of each transcript are read so a
+   * multi-megabyte session does not get slurped into memory just to preview it.
+   *
+   * ROBUSTNESS: a missing folder yields `[]` (not an error); a session whose name
+   * is not a UUID is skipped before any read; a transcript that fails to read or
+   * parse is skipped rather than failing the whole call (one bad file must not
+   * hide every other session). SECURITY: reads are confined to
+   * `~/.claude/projects` — the resolved per-session path is re-checked to live
+   * under that root, so a crafted workspace path can never escape it.
+   */
+  async externalSessions(projectId: string): Promise<ExternalSession[]> {
+    const project = this.requireProject(projectId);
+    const workspace = project.workspace;
+    if (!isLocalWorkspace(workspace)) return [];
+
+    const root = claudeProjectsRoot();
+    const dir = join(root, encodeProjectDir(workspace.path));
+    // Confine to ~/.claude/projects: reject anything that resolves outside it.
+    if (!isInside(root, dir)) return [];
+
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      // Folder absent (no sessions yet) or unreadable: nothing to import.
+      return [];
+    }
+
+    const candidates: { sessionId: string; file: string; mtimeMs: number; size: number }[] = [];
+    for (const name of entries) {
+      if (!name.endsWith('.jsonl')) continue;
+      const sessionId = name.slice(0, -'.jsonl'.length);
+      // Validate the UUID shape BEFORE touching the file.
+      if (!isSessionId(sessionId)) continue;
+      const file = join(dir, name);
+      if (!isInside(root, file)) continue;
+      try {
+        const info = await stat(file);
+        if (!info.isFile()) continue;
+        candidates.push({ sessionId, file, mtimeMs: info.mtimeMs, size: info.size });
+      } catch {
+        continue;
+      }
+    }
+
+    // Newest first.
+    candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    const sessions: ExternalSession[] = [];
+    for (const c of candidates) {
+      try {
+        const head = await readHeadLines(c.file, PREVIEW_LINES, c.size);
+        const { preview, turns } = parseSessionPreview(head);
+        const session: ExternalSession = {
+          sessionId: c.sessionId,
+          updatedAt: new Date(c.mtimeMs).toISOString(),
+          preview,
+        };
+        if (turns > 0) session.turns = turns;
+        sessions.push(session);
+      } catch {
+        // Never let one malformed/unreadable transcript break the listing.
+        continue;
+      }
+    }
+    return sessions;
+  }
+
+  /**
+   * Read the FULL NDJSON transcript of an external Claude Code session for a
+   * project's local workspace, as a list of lines. Used by the chat importer to
+   * reconstruct history. Mirrors the confinement of {@link externalSessions}: the
+   * `sessionId` must be a valid UUID, the workspace must be local, and the
+   * resolved path must live under `~/.claude/projects`. Throws a clear error when
+   * the session id is invalid, the workspace is remote, or the file is missing —
+   * the importer surfaces these to the UI rather than creating an empty chat.
+   */
+  async readSessionTranscript(
+    projectId: string,
+    sessionId: string,
+  ): Promise<string[]> {
+    if (!isSessionId(sessionId)) {
+      throw new Error(`invalid session id: ${sessionId}`);
+    }
+    const project = this.requireProject(projectId);
+    const workspace = project.workspace;
+    if (!isLocalWorkspace(workspace)) {
+      throw new Error('external sessions are only available for local workspaces');
+    }
+    const root = claudeProjectsRoot();
+    const file = join(root, encodeProjectDir(workspace.path), `${sessionId}.jsonl`);
+    if (!isInside(root, file)) {
+      throw new Error('resolved transcript path escapes the Claude projects root');
+    }
+    // Cap the read BEFORE touching the file: a multi-GB .jsonl in
+    // ~/.claude/projects (the user's own dir, but also a tamper/corruption
+    // surface) must never be slurped whole into the sidecar heap. stat() first,
+    // reject anything past a hard size cap, and otherwise read only a bounded
+    // tail — the importer keeps the most recent messages, so the tail carries
+    // exactly what we mirror; the CLI retains the full session for `--resume`.
+    let size: number;
+    try {
+      const info = await stat(file);
+      if (!info.isFile()) {
+        throw new Error(`Claude Code session transcript not found: ${sessionId}`);
+      }
+      size = info.size;
+    } catch {
+      throw new Error(`Claude Code session transcript not found: ${sessionId}`);
+    }
+    if (size > TRANSCRIPT_MAX_BYTES) {
+      throw new Error(
+        `Claude Code session transcript too large to import: ${sessionId} ` +
+          `(${size} bytes exceeds the ${TRANSCRIPT_MAX_BYTES}-byte cap)`,
+      );
+    }
+    try {
+      return await readTailLines(file, size);
+    } catch {
+      throw new Error(`Claude Code session transcript not found: ${sessionId}`);
+    }
+  }
+
   // --- internals ------------------------------------------------------------
 
   private requireProject(id: string): Project {
@@ -282,6 +420,106 @@ export class ProjectManager implements ProjectsAPI {
     }
     const path = await ensureLocalWorkspace(ref.path, { create: createFolder });
     return { kind: 'local', path };
+  }
+}
+
+// --- external Claude Code session helpers ------------------------------------
+
+/** Cap on how many leading transcript lines we read just to build a preview. */
+const PREVIEW_LINES = 40;
+
+/**
+ * A transcript's head is enough to build a preview, so we still cap the total
+ * size we'll consider at preview time. The read itself is already bounded (see
+ * {@link readHeadLines}); this extra guard means a pathologically large head
+ * line never even reaches that read for a one-line preview.
+ */
+const PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Root of the Claude Code transcript store: `<HOME>/.claude/projects`. Reads
+ * `HOME` from the environment (falling back to the OS home dir) so a test or a
+ * non-default profile can point it elsewhere, matching how the CLI resolves it.
+ */
+function claudeProjectsRoot(): string {
+  const home = process.env.HOME ?? homedir();
+  return join(home, '.claude', 'projects');
+}
+
+/**
+ * True when `child` resolves to `root` itself or a path strictly under it. Guards
+ * the transcript reads against path traversal from a crafted workspace path.
+ */
+function isInside(root: string, child: string): boolean {
+  const r = resolve(root);
+  const c = resolve(child);
+  return c === r || c.startsWith(r + sep);
+}
+
+/** Largest first chunk we read to derive a preview, regardless of file size. */
+const PREVIEW_HEAD_BYTES = 256 * 1024;
+
+/**
+ * Hard cap on a transcript we will import. Larger files are rejected outright
+ * rather than read, so a multi-GB .jsonl can never reach the sidecar heap. The
+ * importer only persists the most recent {@link IMPORT_MESSAGE_LIMIT} messages,
+ * and the CLI keeps the full session for `--resume`, so a tail of this size is
+ * always more than enough context to mirror locally.
+ */
+const TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024;
+
+/** Largest trailing chunk we read from a transcript when importing it. */
+const TRANSCRIPT_TAIL_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Read the TAIL of a transcript as lines without loading the whole file. We read
+ * at most a single bounded chunk (`TRANSCRIPT_TAIL_BYTES`) from the END via a
+ * file descriptor, so heap usage stays O(chunk) instead of O(file). The caller
+ * has already rejected files past {@link TRANSCRIPT_MAX_BYTES}; this further
+ * bounds the read to the recent tail, which is all the importer keeps. When the
+ * file is larger than the chunk the first (partial) line is dropped — that line
+ * fails `JSON.parse` in {@link jsonlToBlocks} and would be skipped regardless.
+ * `size` is the value already returned by the caller's `stat()`.
+ */
+async function readTailLines(file: string, size: number): Promise<string[]> {
+  if (size <= 0) return [];
+  const length = Math.min(size, TRANSCRIPT_TAIL_BYTES);
+  const position = size - length;
+  const handle = await open(file, 'r');
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, position);
+    const text = buffer.toString('utf8', 0, bytesRead);
+    const lines = text.split('\n');
+    // Drop the leading partial line only when we did not read from the start.
+    if (position > 0 && lines.length > 0) lines.shift();
+    return lines;
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Read at most `maxLines` lines from the START of a file without loading the
+ * whole thing. Transcripts can be huge (multi-hundred-MB terminal logs), and we
+ * only need the head to derive a preview/turn count, so we read at most a single
+ * bounded chunk (`PREVIEW_HEAD_BYTES`) via a file descriptor and split that —
+ * heap usage stays O(chunk) instead of O(file). `size` is the value already
+ * returned by the caller's `stat()`: files larger than {@link PREVIEW_MAX_BYTES}
+ * are skipped (empty preview) rather than read at all.
+ */
+async function readHeadLines(file: string, maxLines: number, size: number): Promise<string[]> {
+  if (size > PREVIEW_MAX_BYTES) return [];
+  const length = Math.min(size, PREVIEW_HEAD_BYTES);
+  if (length <= 0) return [];
+  const handle = await open(file, 'r');
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    const text = buffer.toString('utf8', 0, bytesRead);
+    return text.split('\n').slice(0, maxLines);
+  } finally {
+    await handle.close();
   }
 }
 

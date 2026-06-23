@@ -8,7 +8,12 @@
  */
 import type { Project, WorkspaceRef } from './project.js';
 import type { Worktree } from './worktree.js';
-import type { Chat, ChatMessage, ChatSummary } from './chat.js';
+import type {
+  Chat,
+  ChatMessage,
+  ChatSummary,
+  ExternalSession,
+} from './chat.js';
 import type { DirEntry, RemoteRuntime } from './runtime.js';
 import type {
   ApiKeyTestResult,
@@ -36,6 +41,14 @@ export interface ProjectsAPI {
    * for a non-repo folder).
    */
   worktrees(projectId: string): Promise<Worktree[]>;
+  /**
+   * List the Claude Code CLI sessions that were started OUTSIDE the app (in the
+   * terminal) for this project's workspace, so they can be imported and continued
+   * inside VingsForge. Reads `~/.claude/projects/<encoded-cwd>/*.jsonl`, newest
+   * first. Returns `[]` for remote workspaces or when no transcript folder exists;
+   * never throws on a malformed transcript (the offending session is skipped).
+   */
+  externalSessions(projectId: string): Promise<ExternalSession[]>;
 }
 
 /** Chats API — Spec 02 §5. Engine events stream over a dedicated `engine.events` channel. */
@@ -54,6 +67,16 @@ export interface ChatsAPI {
    * them onto the turn's {@link EngineSendContext.modes}.
    */
   send(chatId: string, text: string, modes?: PermissionModes): Promise<void>;
+  /**
+   * Import a Claude Code CLI session that was created OUTSIDE the app (see
+   * {@link ProjectsAPI.externalSessions}) as a new chat in the project. The chat
+   * is created with `claudeSessionId` set to `sessionId`, so the NEXT turn resumes
+   * the same CLI session via `claude --resume`. The prior transcript is imported
+   * best-effort (bounded to the most recent messages); the title is derived from
+   * the first user message. Throws if the transcript file is missing or `sessionId`
+   * is not a valid UUID.
+   */
+  importSession(projectId: string, sessionId: string): Promise<Chat>;
   interrupt(chatId: string): Promise<void>;
   rename(chatId: string, title: string): Promise<void>;
   archive(chatId: string): Promise<void>;

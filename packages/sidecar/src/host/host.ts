@@ -326,7 +326,16 @@ export async function createHost(opts?: {
   const selectedRunner = useSdkEngine ? runEngineTurn : claudeCliRunner;
   log(`engine runner: ${useSdkEngine ? 'sdk' : 'claude-cli'}`);
 
-  const chatStore = new ChatStore({ db, resolveContext, runEngineTurn: selectedRunner });
+  const chatStore = new ChatStore({
+    db,
+    resolveContext,
+    runEngineTurn: selectedRunner,
+    // Import of terminal-created sessions delegates transcript I/O (and its
+    // ~/.claude/projects confinement) to the ProjectManager, so the store stays
+    // fs-free.
+    loadSessionTranscript: (projectId, sessionId) =>
+      projects.readSessionTranscript(projectId, sessionId),
+  });
 
   // Single event bus: chat-store events fan out to connected UI clients.
   const listeners = new Set<(event: EngineEvent) => void>();

@@ -10,6 +10,7 @@ import type {
   ChatSummary,
   EngineCommand,
   EngineEvent,
+  ExternalSession,
   GlobalSettings,
   ModelInfo,
   Project,
@@ -140,6 +141,34 @@ const MOCK_HISTORY: Record<string, ChatMessage[]> = {
     },
   ],
   'c-2': [],
+};
+
+/**
+ * External Claude Code sessions (created in the terminal) discoverable per local
+ * project, keyed by project id. Drives the "continue a terminal session" UI in
+ * the mock without a real `~/.claude/projects` folder.
+ */
+const MOCK_EXTERNAL_SESSIONS: Record<string, ExternalSession[]> = {
+  'p-local': [
+    {
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      updatedAt: now(),
+      preview: 'Add a dark-mode toggle to the settings panel and persist it.',
+      turns: 12,
+    },
+    {
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      updatedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      preview: 'Debug the failing worktree-parse test on Windows CRLF input.',
+      turns: 6,
+    },
+    {
+      sessionId: '33333333-3333-4333-8333-333333333333',
+      updatedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      preview: 'Wire the loopback host auth token through the WS handshake.',
+      turns: 3,
+    },
+  ],
 };
 
 const MOCK_MODELS: ModelInfo[] = KNOWN_MODELS.map((id) => ({
@@ -293,6 +322,7 @@ export function createMockIpcClient(): IpcClient {
   const chats = structuredClone(MOCK_CHATS);
   const history = structuredClone(MOCK_HISTORY);
   const runtimes = structuredClone(MOCK_RUNTIMES);
+  const externalSessions = structuredClone(MOCK_EXTERNAL_SESSIONS);
   const engine = new MockEngine();
   let chatSeq = 100;
 
@@ -355,6 +385,12 @@ export function createMockIpcClient(): IpcClient {
           },
         ];
       },
+      async externalSessions(projectId) {
+        const project = projects.find((p) => p.id === projectId);
+        // Remote workspaces have no local ~/.claude/projects transcripts.
+        if (!project || project.workspace.kind !== 'local') return [];
+        return structuredClone(externalSessions[projectId] ?? []);
+      },
     },
     chats: {
       async list(projectId) {
@@ -380,6 +416,51 @@ export function createMockIpcClient(): IpcClient {
           archived: false,
         });
         history[id] = [];
+        return chat;
+      },
+      async importSession(projectId, sessionId) {
+        const external = (externalSessions[projectId] ?? []).find(
+          (s) => s.sessionId === sessionId,
+        );
+        const id = `c-${(chatSeq += 1)}`;
+        const title = external?.preview.slice(0, 60) || 'Imported session';
+        const chat: Chat = {
+          id,
+          projectId,
+          title,
+          claudeSessionId: sessionId,
+          createdAt: now(),
+          updatedAt: now(),
+          archived: false,
+        };
+        (chats[projectId] ??= []).unshift({
+          id,
+          projectId,
+          title,
+          updatedAt: chat.updatedAt,
+          archived: false,
+          ...(external?.preview ? { lastMessagePreview: external.preview } : {}),
+        });
+        // Seed a short fake history so the imported chat is not empty on open.
+        history[id] = [
+          {
+            id: `m-${id}-1`,
+            chatId: id,
+            role: 'user',
+            blocks: [{ kind: 'text', text: external?.preview ?? 'Continue this session.' }],
+            createdAt: now(),
+          },
+          {
+            id: `m-${id}-2`,
+            chatId: id,
+            role: 'assistant',
+            model: 'claude-opus-4-8',
+            blocks: [
+              { kind: 'text', text: 'Imported from a terminal session — ready to continue.' },
+            ],
+            createdAt: now(),
+          },
+        ];
         return chat;
       },
       async history(chatId) {

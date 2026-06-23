@@ -16,6 +16,7 @@ import {
   type PermissionModes,
   type PermissionPolicy,
 } from '@vingsforge/shared';
+import { isSessionId, jsonlToBlocks } from '../projects/external-sessions.js';
 import {
   type AppendMessageInput,
   type CreateChatInput,
@@ -46,6 +47,22 @@ export class TurnInProgressError extends Error {
   constructor(readonly chatId: string) {
     super(`a turn is already running for chat: ${chatId}`);
     this.name = 'TurnInProgressError';
+  }
+}
+
+/** Raised by {@link ChatStore.importSession} for a non-UUID session id. */
+export class InvalidSessionIdError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`invalid Claude Code session id: ${sessionId}`);
+    this.name = 'InvalidSessionIdError';
+  }
+}
+
+/** Raised when importing a session but no transcript loader was wired. */
+export class SessionImportUnsupportedError extends Error {
+  constructor() {
+    super('importing external Claude Code sessions is not supported here');
+    this.name = 'SessionImportUnsupportedError';
   }
 }
 
@@ -147,6 +164,14 @@ export interface ChatStoreDeps {
    * Defaults to a truncated slice of the text when omitted.
    */
   titleFromText?(text: string): string;
+  /**
+   * Load the full NDJSON transcript (as lines) of an external Claude Code CLI
+   * session for {@link ChatStore.importSession}. Injected so the fs/path logic and
+   * its `~/.claude/projects` confinement live in one place (the ProjectManager);
+   * the store stays fs-free and unit-testable. Must throw when the workspace is
+   * remote, the session id is invalid, or the transcript file is missing.
+   */
+  loadSessionTranscript?(projectId: string, sessionId: string): Promise<string[]>;
 }
 
 // --- Input validation (Spec 02 §5) -----------------------------------------
@@ -158,6 +183,13 @@ const titleSchema = z.string().trim().min(1).max(200);
 // Sized to the engine's max context window (see Spec 03).
 const MESSAGE_TEXT_MAX = 200_000;
 const messageTextSchema = z.string().min(1).max(MESSAGE_TEXT_MAX);
+/**
+ * Upper bound on how many imported messages we persist from an external session,
+ * keeping the MOST RECENT. Bounds memory/cost when adopting a very long terminal
+ * transcript; the CLI still has the full session, so `--resume` continues with
+ * complete server-side context regardless of how much we mirror locally.
+ */
+const IMPORT_MESSAGE_LIMIT = 200;
 const createOptsSchema = z
   .object({
     model: z.string().min(1).optional(),
@@ -229,6 +261,64 @@ export class ChatStore implements ChatsAPI {
     if (parsed?.model !== undefined) input.modelOverride = parsed.model;
     if (parsed?.runtimeId !== undefined) input.runtimeOverride = parsed.runtimeId;
     return this.deps.db.transaction(() => this.deps.db.chats.create(input));
+  }
+
+  /**
+   * Import a Claude Code CLI session created OUTSIDE the app as a new chat, so it
+   * can be continued in-app (Spec: continue terminal sessions). Creates the chat
+   * with `claudeSessionId = sessionId` up front, so the NEXT {@link send} resumes
+   * the same CLI session via `claude --resume` (the resume infra already reads
+   * this column). The prior transcript is mirrored best-effort: only mappable
+   * user/assistant turns are kept, bounded to the most recent
+   * {@link IMPORT_MESSAGE_LIMIT} so a huge terminal session is not slurped whole.
+   *
+   * Throws {@link InvalidSessionIdError} for a non-UUID id (before any read),
+   * {@link SessionImportUnsupportedError} when no transcript loader is wired, and a
+   * clear error (from the loader) when the workspace is remote or the file is
+   * missing — never leaving a half-created chat that points at a session it cannot
+   * resume: the chat row is created only AFTER the transcript reads successfully.
+   */
+  async importSession(projectId: string, sessionId: string): Promise<Chat> {
+    if (!isSessionId(sessionId)) throw new InvalidSessionIdError(sessionId);
+    if (!this.deps.db.projects.get(projectId)) {
+      throw new Error(`project not found: ${projectId}`);
+    }
+    const load = this.deps.loadSessionTranscript;
+    if (!load) throw new SessionImportUnsupportedError();
+
+    // Read+parse the transcript BEFORE creating any row, so a missing/remote
+    // transcript fails cleanly with no orphan chat.
+    const lines = await load(projectId, sessionId);
+    const imported = jsonlToBlocks(lines);
+    // Keep the most recent messages within the import bound (chronological order
+    // preserved). The CLI retains the full session, so `--resume` still has it all.
+    const recent =
+      imported.length > IMPORT_MESSAGE_LIMIT
+        ? imported.slice(imported.length - IMPORT_MESSAGE_LIMIT)
+        : imported;
+
+    // Title from the first imported user text, else a stable fallback.
+    const firstUserText = recent.find((m) => m.role === 'user')?.blocks.find(
+      (b): b is Extract<typeof b, { kind: 'text' }> => b.kind === 'text',
+    )?.text;
+    const make = this.deps.titleFromText ?? defaultTitle;
+    const title = (firstUserText ? make(firstUserText) : `Imported session`)
+      .slice(0, 200)
+      .trim();
+
+    return this.deps.db.transaction(() => {
+      const createInput: CreateChatInput = { projectId, claudeSessionId: sessionId };
+      if (title.length > 0) createInput.title = title;
+      const chat = this.deps.db.chats.create(createInput);
+      for (const m of recent) {
+        this.deps.db.messages.append({
+          chatId: chat.id,
+          role: m.role,
+          blocks: m.blocks,
+        });
+      }
+      return chat;
+    });
   }
 
   /** Full ordered history of a chat for rendering (Spec 02 RF-03, RF-09). */

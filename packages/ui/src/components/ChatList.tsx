@@ -11,18 +11,32 @@ export interface ChatListProps {
   chats: ChatSummary[];
   onSelectChat(id: string): void;
   onNewChat(): void;
+  /** Opens the "Continuar sessão do Claude" modal (import a terminal session). */
+  onContinueClaudeSession(): void;
 }
 
-export function ChatList({ projectName, chats, onSelectChat, onNewChat }: ChatListProps): JSX.Element {
+export function ChatList({
+  projectName,
+  chats,
+  onSelectChat,
+  onNewChat,
+  onContinueClaudeSession,
+}: ChatListProps): JSX.Element {
   const visible = chats.filter((c) => !c.archived);
   return (
     <div style={shell}>
       <header style={head}>
         <h2 style={title}>{projectName ?? 'Chats'}</h2>
-        <button style={newBtn} onClick={onNewChat}>
-          <Icon name="plus" size={14} />
-          <span>New chat</span>
-        </button>
+        <div style={actions}>
+          <button style={ghostBtn} onClick={onContinueClaudeSession}>
+            <Icon name="terminal" size={14} />
+            <span>Continuar sessão do Claude</span>
+          </button>
+          <button style={newBtn} onClick={onNewChat}>
+            <Icon name="plus" size={14} />
+            <span>New chat</span>
+          </button>
+        </div>
       </header>
 
       {visible.length === 0 ? (
@@ -63,6 +77,18 @@ const head: CSSProperties = {
   borderBottom: '1px solid var(--vf-border)',
 };
 const title: CSSProperties = { margin: 0, fontSize: 15, fontWeight: 600 };
+const actions: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
+const ghostBtn: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '6px 12px',
+  borderRadius: 7,
+  border: '1px solid var(--vf-border)',
+  background: 'transparent',
+  color: 'var(--vf-text-muted)',
+  fontSize: 13,
+};
 const newBtn: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',

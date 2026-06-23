@@ -68,6 +68,14 @@ export interface AppStore {
   selectChat(id: string): Promise<void>;
   newProject(): Promise<void>;
   newChat(): Promise<void>;
+  /**
+   * Import a Claude Code CLI session created OUTSIDE the app (in the terminal) as
+   * a new chat in the active project, then reload the chat list and open the
+   * imported chat (it already carries the prior transcript). Resolves to the new
+   * chat id, or null when there is no active project. Throws if the import fails
+   * (caller surfaces the error); never leaves a half-applied selection.
+   */
+  importExternalSession(sessionId: string): Promise<string | null>;
   sendMessage(text: string): Promise<void>;
   interrupt(): Promise<void>;
   resolvePermission(decision: 'allow' | 'deny', opts?: { reason?: string; remember?: boolean }): Promise<void>;
@@ -246,6 +254,21 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
     await doSelectChat(chat.id);
   }, [ipc, activeProjectId, model, runtimeId, doSelectChat]);
 
+  const importExternalSession = useCallback(
+    async (sessionId: string): Promise<string | null> => {
+      if (!activeProjectId) return null;
+      // Create the imported chat first (it comes back with claudeSessionId set and
+      // its prior transcript mirrored), then refresh the list so the new row shows,
+      // and finally open it so the user lands on the continued conversation.
+      const chat = await ipc.chats.importSession(activeProjectId, sessionId);
+      const list = await ipc.chats.list(activeProjectId);
+      setChats(list);
+      await doSelectChat(chat.id);
+      return chat.id;
+    },
+    [ipc, activeProjectId, doSelectChat],
+  );
+
   const sendMessage = useCallback(
     async (text: string) => {
       const chatId = activeChatId;
@@ -314,6 +337,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       selectChat: doSelectChat,
       newProject,
       newChat,
+      importExternalSession,
       sendMessage,
       interrupt,
       resolvePermission,
@@ -353,6 +377,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       doSelectChat,
       newProject,
       newChat,
+      importExternalSession,
       sendMessage,
       interrupt,
       resolvePermission,
