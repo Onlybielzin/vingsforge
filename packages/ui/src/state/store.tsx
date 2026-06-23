@@ -66,6 +66,8 @@ export interface AppStore {
   refreshUpdateStatus(): Promise<UpdateStatus | null>;
   selectProject(id: string): Promise<void>;
   selectChat(id: string): Promise<void>;
+  /** Closes the open chat and returns to the project's chat list. */
+  closeChat(): void;
   newProject(): Promise<void>;
   newChat(): Promise<void>;
   /**
@@ -254,6 +256,15 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
     await doSelectChat(chat.id);
   }, [ipc, activeProjectId, model, runtimeId, doSelectChat]);
 
+  const closeChat = useCallback(() => {
+    // Back to the project's chat list. Forget the remembered chat so reopening
+    // the project doesn't jump straight back into the conversation.
+    if (activeProjectId) localStorage.removeItem(`${LAST_CHAT_KEY}.${activeProjectId}`);
+    activeChatRef.current = null;
+    setActiveChatId(null);
+    setConversation(emptyConversation());
+  }, [activeProjectId]);
+
   const importExternalSession = useCallback(
     async (sessionId: string): Promise<string | null> => {
       if (!activeProjectId) return null;
@@ -335,6 +346,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       refreshUpdateStatus,
       selectProject: (id) => doSelectProject(id),
       selectChat: doSelectChat,
+      closeChat,
       newProject,
       newChat,
       importExternalSession,
@@ -375,6 +387,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       closeSettings,
       doSelectProject,
       doSelectChat,
+      closeChat,
       newProject,
       newChat,
       importExternalSession,

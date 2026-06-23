@@ -35,6 +35,8 @@ export interface ConversationProps {
   onResolvePermission(decision: PermissionDecision): void;
   /** Opens a tool card's content in the right panel's Detail tab. */
   onOpenDetail(detail: DetailContent): void;
+  /** Returns to the project's chat list (clears the active chat). */
+  onBack(): void;
 }
 
 export function Conversation(props: ConversationProps): JSX.Element {
@@ -50,6 +52,9 @@ export function Conversation(props: ConversationProps): JSX.Element {
   return (
     <div style={shell}>
       <header style={head}>
+        <button style={backBtn} onClick={props.onBack} title="Voltar para a lista de chats" aria-label="Voltar">
+          <Icon name="chevron-left" size={16} />
+        </button>
         <h2 style={title}>{props.title}</h2>
         {conversation.streaming ? <span style={streamTag}>streaming…</span> : null}
       </header>
@@ -107,6 +112,19 @@ const head: CSSProperties = {
   gap: 10,
   padding: '12px 18px',
   borderBottom: '1px solid var(--vf-border)',
+};
+const backBtn: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  flexShrink: 0,
+  borderRadius: 7,
+  border: '1px solid var(--vf-border)',
+  background: 'var(--vf-surface)',
+  color: 'var(--vf-text-muted)',
+  cursor: 'pointer',
 };
 const title: CSSProperties = { margin: 0, fontSize: 14, fontWeight: 600 };
 const streamTag: CSSProperties = { fontSize: 11, color: 'var(--vf-accent)' };

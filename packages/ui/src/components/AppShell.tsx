@@ -112,6 +112,7 @@ export function AppShell(): JSX.Element {
             onSend={(text) => void store.sendMessage(text)}
             onInterrupt={() => void store.interrupt()}
             onOpenDetail={store.setDetail}
+            onBack={() => store.closeChat()}
             onResolvePermission={({ decision, reason, remember }) =>
               void store.resolvePermission(decision, {
                 ...(reason ? { reason } : {}),

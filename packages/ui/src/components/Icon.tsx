@@ -10,6 +10,7 @@ export type IconName =
   | 'chat'
   | 'settings'
   | 'chevron-right'
+  | 'chevron-left'
   | 'chevron-down'
   | 'send'
   | 'stop'
@@ -29,6 +30,7 @@ const PATHS: Record<IconName, string> = {
   chat: 'M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19 12l1.5-1-1.3-3.2-1.8.4-1.4-1.4.4-1.8L12 3.7 9.6 4.6l-1.4 1.4-1.8-.4L5 8.8 6.5 11 6 13l-1.5 1 1.3 3.2 1.8-.4 1.4 1.4-.4 1.8L12 20.3l2.4-.9 1.4-1.4 1.8.4 1.3-3.2L19 14z',
   'chevron-right': 'M9 6l6 6-6 6',
+  'chevron-left': 'M15 6l-6 6 6 6',
   'chevron-down': 'M6 9l6 6 6-6',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   stop: 'M6 6h12v12H6z',
