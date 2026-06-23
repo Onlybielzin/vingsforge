@@ -1,19 +1,73 @@
 # VingsForge
 
-App desktop **Linux-first** (Tauri 2 + sidecar Node + React) que usa a **Claude como motor** de um coding agent. Projetos são pastas; cada projeto contém chats. O motor usa o **login do `claude` CLI da máquina** (assinatura, sem API key) ou uma API key.
+App desktop **Linux-first** (Tauri 2 + sidecar Node + React) que usa a **Claude como motor** de um coding agent — no estilo OpenCovibe / Nimbalyst. Projetos são pastas no disco; cada projeto contém chats. O motor usa **o login do `claude` CLI já instalado na máquina** (sua assinatura Pro/Max, sem API key) ou uma API key.
+
+![Conversa](docs/screenshots/02-conversation.png)
+
+## Features
+
+- **Motor real pela sua assinatura** — usa o login do `claude` CLI da máquina (`apiKeySource: none`); API key é opcional.
+- **Projetos = pastas** com seletor de pasta nativo; vários **chats** por projeto, persistidos.
+- **Streaming** de resposta, painel de **raciocínio** colapsável, **cartões de ferramenta** (read/edit/bash) com estado.
+- **Modos de permissão**: `Plano` (só lê/planeja) · `Padrão` · `Edições` (auto-aprova edições) · `Bypass` (aprova tudo) — mapeados pro `--permission-mode` do Claude.
+- **Explorer** de arquivos do workspace e aba **Detail** (diff/saída de uma tool).
+- **Worktrees** — aba que lista os git worktrees do projeto (branch, HEAD, principal/locked).
+- **Configurações**: modo de auth (plano/key), modelo padrão, effort, tema dark/light, mostrar raciocínio/custo.
+- **Runtime remoto (VPS)** — infra de daemon headless via SSH + WebSocket (Spec 05).
+- **Segurança**: WS só em `127.0.0.1` com token por-sessão; chave de API no keyring (libsecret), nunca em arquivo/log; tools confinadas à raiz do workspace.
+- **Linux-first**: pacotes AppImage + `.deb`; tema escuro nativo; sem emoji na UI.
+
+## Screenshots
+
+| Conversa + modos | Configurações | Worktrees |
+|---|---|---|
+| ![main](docs/screenshots/01-main.png) | ![settings](docs/screenshots/03-settings.png) | ![worktrees](docs/screenshots/04-worktrees.png) |
+
+## Como funciona
+
+```
+WebView (React) ──ws://127.0.0.1:8731──▶ sidecar Node (host)
+                                            ├─ spawna `claude` CLI (stream-json) = sua assinatura
+                                            ├─ SQLite (projetos/chats) + tools confinadas ao workspace
+                                            └─ mesmo protocolo p/ runtime remoto (daemon na VPS via SSH)
+```
+
+O shell Tauri (Rust) só sobe e supervisiona o sidecar e injeta um token de auth por-sessão na WebView. O motor é o `claude` CLI — então funciona com **sua assinatura** (login da máquina) ou uma API key.
 
 ## Stack
+
 - **Shell:** Tauri 2 (Rust + WebKitGTK)
-- **Motor:** sidecar Node (`@vingsforge/sidecar`) que spawna o `claude` CLI em stream-json; ponte via WebSocket local (`ws://127.0.0.1:8731`)
+- **Motor:** sidecar Node (`@vingsforge/sidecar`) → `claude` CLI em stream-json
 - **UI:** React + Vite + TypeScript
-- **Persistência:** SQLite (better-sqlite3) + arquivos no disco
-- Monorepo pnpm: `packages/shared|sidecar|ui`, `apps/desktop`
+- **Persistência:** SQLite (better-sqlite3) + arquivos no disco (XDG)
+- Monorepo pnpm: `packages/shared | sidecar | ui`, `apps/desktop`
+
+## Requisitos
+
+- Node 20+, pnpm
+- Rust + toolchain Tauri (WebKitGTK, etc.)
+- **Claude Code CLI** logado (`claude` no PATH) — para o modo plano
+- `libsecret-tools` (`secret-tool`) — apenas para o modo API key
 
 ## Dev
+
 ```sh
 pnpm install
 pnpm --filter @vingsforge/sidecar build
 cd apps/desktop && pnpm tauri dev
 ```
 
-Specs em `docs/specs/`.
+## Build (AppImage + .deb)
+
+```sh
+# empacota o sidecar self-contained nos resources e gera os bundles
+pnpm --filter @vingsforge/sidecar build
+pnpm --filter @vingsforge/sidecar deploy --prod --legacy --node-linker=hoisted /tmp/sidecar-hoisted
+cp -r /tmp/sidecar-hoisted apps/desktop/src-tauri/sidecar && rm -rf apps/desktop/src-tauri/sidecar/node_modules/.bin
+cd apps/desktop && pnpm tauri build
+# artefatos em apps/desktop/src-tauri/target/release/bundle/{appimage,deb}/
+```
+
+> O `node` e o `claude` continuam vindo da máquina; o sidecar (incl. `better-sqlite3` nativo) é compilado contra o Node local — para distribuir a outras máquinas, o ABI do Node precisa bater.
+
+Specs detalhadas em [`docs/specs/`](docs/specs/).

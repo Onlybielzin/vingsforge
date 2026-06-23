@@ -21,3 +21,4 @@ apps/desktop/src-tauri/binaries/vingsforge-sidecar-*
 .DS_Store
 .vscode/
 .idea/
+apps/desktop/src-tauri/sidecar/
