@@ -188,6 +188,14 @@ export function makeClaudeCliRunner(
       permissionMode,
       '--add-dir',
       root,
+      // The multi-agent `Workflow` orchestration tool requires an interactive
+      // "Review dynamic workflow / Allow?" approval gate we cannot present in
+      // headless stream-json mode — so it always errors. It is also the wrong
+      // primitive inside a single coding-agent chat (it fans out expensive,
+      // recursive sub-agents). Disable it so the agent just does the task
+      // directly. (See OpenCovibe's --disallowed-tools usage.)
+      '--disallowedTools',
+      'Workflow',
     ];
     // Defensive re-check: a tampered/legacy DB row (or stale Map entry) must
     // never become an attacker-chosen flag. Pass `--resume=<id>` as a single
