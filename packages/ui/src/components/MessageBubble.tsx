@@ -9,6 +9,7 @@ import type { DetailContent } from './RightPanel.js';
 import { Markdown } from './Markdown.js';
 import { ReasoningPanel } from './ReasoningPanel.js';
 import { ToolCard } from './ToolCard.js';
+import { ThinkingDots } from './ThinkingDots.js';
 
 export interface MessageBubbleProps {
   turn: Turn;
@@ -18,6 +19,9 @@ export interface MessageBubbleProps {
 
 export function MessageBubble({ turn, showThinking, onOpenDetail }: MessageBubbleProps): JSX.Element {
   const isUser = turn.role === 'user';
+  // While streaming with no visible words yet, read as "pensando"; once text is
+  // flowing, keep just the dots as a subtle activity cue.
+  const hasVisibleText = turn.items.some((it) => it.kind === 'text' && it.text.trim().length > 0);
   return (
     <div style={{ ...row, justifyContent: isUser ? 'flex-end' : 'flex-start' }} className="vf-fade-in">
       <div style={{ ...bubble, ...(isUser ? userBubble : assistantBubble) }}>
@@ -29,9 +33,9 @@ export function MessageBubble({ turn, showThinking, onOpenDetail }: MessageBubbl
           return <ToolCard key={item.card.callId} card={item.card} onOpenDetail={onOpenDetail} />;
         })}
         {turn.streaming ? (
-          <span style={cursor} className="vf-pulse" aria-label="streaming">
-            ●
-          </span>
+          <div style={{ marginTop: turn.items.length > 0 ? 6 : 0 }}>
+            <ThinkingDots {...(hasVisibleText ? {} : { label: 'pensando' })} />
+          </div>
         ) : null}
       </div>
     </div>
@@ -63,4 +67,3 @@ const roleTag: CSSProperties = {
   color: 'var(--vf-text-faint)',
   marginBottom: 4,
 };
-const cursor: CSSProperties = { color: 'var(--vf-accent)', fontSize: 10, marginLeft: 2 };
