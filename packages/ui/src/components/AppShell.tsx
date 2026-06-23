@@ -40,6 +40,10 @@ export function AppShell(): JSX.Element {
     // the rest (min-height:0 lets the inner scroll panes shrink correctly).
     flex: 1,
     minHeight: 0,
+    // Wide content must clip/scroll inside its column, never overflow the grid
+    // and push the sidebar off-screen (min-width:0 lets the tracks shrink).
+    minWidth: 0,
+    overflow: 'hidden',
     gridTemplateColumns:
       store.rightPanel === null
         ? 'minmax(220px, 260px) minmax(0, 1fr) 28px'
@@ -166,7 +170,7 @@ const grid: CSSProperties = {
   display: 'grid',
   height: '100%',
 };
-const mainCol: CSSProperties = { minWidth: 0, height: '100%', background: 'var(--vf-bg)' };
+const mainCol: CSSProperties = { minWidth: 0, height: '100%', overflow: 'hidden', background: 'var(--vf-bg)' };
 const empty: CSSProperties = {
   height: '100%',
   display: 'flex',

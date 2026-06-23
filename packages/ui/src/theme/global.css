@@ -36,6 +36,10 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  /* O shell de 3 colunas gerencia seu próprio scroll. O documento NUNCA deve
+     rolar — sem isso, um conteúdo largo (linha de código/token comprido) gera
+     scroll horizontal e empurra a sidebar pra fora da borda esquerda. */
+  overflow: hidden;
 }
 
 body {

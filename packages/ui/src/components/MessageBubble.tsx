@@ -41,6 +41,7 @@ export function MessageBubble({ turn, showThinking, onOpenDetail }: MessageBubbl
 const row: CSSProperties = { display: 'flex', padding: '4px 0' };
 const bubble: CSSProperties = {
   maxWidth: '82%',
+  minWidth: 0,
   padding: '10px 14px',
   borderRadius: 12,
   border: '1px solid var(--vf-border)',
