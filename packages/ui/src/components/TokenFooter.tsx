@@ -3,21 +3,33 @@
  * an optional estimated cost when the runtime reports it.
  */
 import type { CSSProperties } from 'react';
-import type { Usage } from '@vingsforge/shared';
+import type { ModelId, Usage } from '@vingsforge/shared';
+import { ContextMeter } from './ContextMeter.js';
 
 export interface TokenFooterProps {
   turnUsage?: Usage;
   sessionUsage: Usage;
   showCost: boolean;
+  /** Active model id; resolves the context-meter window. */
+  model?: ModelId;
+  /** Usage of the latest turn that has usage, for the context meter. */
+  contextUsage?: Usage;
 }
 
 function fmt(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
-export function TokenFooter({ turnUsage, sessionUsage, showCost }: TokenFooterProps): JSX.Element {
+export function TokenFooter({
+  turnUsage,
+  sessionUsage,
+  showCost,
+  model,
+  contextUsage,
+}: TokenFooterProps): JSX.Element {
   return (
     <div style={shell}>
+      <ContextMeter {...(contextUsage ? { usage: contextUsage } : {})} {...(model ? { model } : {})} />
       {turnUsage ? (
         <span style={group}>
           <span style={label}>turn</span>

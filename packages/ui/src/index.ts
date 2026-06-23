@@ -55,6 +55,7 @@ export {
 } from './components/PermissionCard.js';
 export { InputBar, type InputBarProps } from './components/InputBar.js';
 export { TokenFooter, type TokenFooterProps } from './components/TokenFooter.js';
+export { ContextMeter, type ContextMeterProps } from './components/ContextMeter.js';
 export { RightPanel, type RightPanelProps, type DetailContent } from './components/RightPanel.js';
 export { Markdown, CodeBlock } from './components/Markdown.js';
 export { Icon, type IconName, type IconProps } from './components/Icon.js';

@@ -6,6 +6,7 @@
  * never imported here so the value never leaks into logs (Spec 07 §6).
  */
 import type { ModelInfo } from '@vingsforge/shared';
+import { contextWindowFor } from '@vingsforge/shared';
 
 /** A model row as returned by the Models API (`GET /v1/models`). */
 export interface RawModelRow {
@@ -51,5 +52,6 @@ export function toModelInfo(row: RawModelRow): ModelInfo {
   return {
     id: row.id,
     displayName: row.display_name ?? row.id,
+    contextWindow: contextWindowFor(row.id),
   };
 }

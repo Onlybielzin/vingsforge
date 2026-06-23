@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import {
+  contextWindowFor,
   isKnownModel,
   KNOWN_MODELS,
   type ApiKeyTestResult,
@@ -220,7 +221,11 @@ export class SettingsStore implements SettingsAPI {
 
 /** The static allowlist as ModelInfo (offline fallback for {@link SettingsStore.models}). */
 export function staticModels(): ModelInfo[] {
-  return (KNOWN_MODELS as readonly ModelId[]).map((id) => ({ id, displayName: id }));
+  return (KNOWN_MODELS as readonly ModelId[]).map((id) => ({
+    id,
+    displayName: id,
+    contextWindow: contextWindowFor(id),
+  }));
 }
 
 /** Map any thrown value to a short, key-free error string (Spec 07 §6). */

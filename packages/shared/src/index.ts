@@ -3,6 +3,7 @@
  * Re-exports every module so consumers import from '@vingsforge/shared'.
  */
 export * from './common.js';
+export * from './context-usage.js';
 export * from './engine.js';
 export * from './permissions.js';
 export * from './project.js';

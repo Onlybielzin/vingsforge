@@ -43,6 +43,9 @@ export function Conversation(props: ConversationProps): JSX.Element {
   const { conversation } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastTurn = conversation.turns[conversation.turns.length - 1];
+  // Context meter measures the latest request: the most recent turn that
+  // actually carries usage (a trailing user/streaming turn has none yet).
+  const lastUsageTurn = [...conversation.turns].reverse().find((t) => t.usage);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -98,6 +101,8 @@ export function Conversation(props: ConversationProps): JSX.Element {
       />
       <TokenFooter
         {...(lastTurn?.usage ? { turnUsage: lastTurn.usage } : {})}
+        {...(lastUsageTurn?.usage ? { contextUsage: lastUsageTurn.usage } : {})}
+        model={props.model}
         sessionUsage={conversation.sessionUsage}
         showCost={props.showCost}
       />

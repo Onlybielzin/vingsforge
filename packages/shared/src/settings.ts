@@ -62,6 +62,12 @@ export interface ModelInfo {
   maxOutputTokens?: number;
   /** Whether the model supports adaptive thinking (Spec 03 §2). */
   supportsThinking?: boolean;
+  /**
+   * Total context window (input) size in tokens, when known. Used by the
+   * context meter to compute how much of the window the latest request fills.
+   * See shared `context-usage.ts` for the per-model table and fallback.
+   */
+  contextWindow?: number;
 }
 
 /** Result of validating the API key (Spec 07 §5 testApiKey). */

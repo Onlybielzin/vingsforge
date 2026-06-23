@@ -153,7 +153,9 @@ describe('SettingsStore.models', () => {
     const { store } = makeStore(client);
     await store.setApiKey('sk-ant-x');
     const models = await store.models();
-    expect(models).toEqual([{ id: 'claude-opus-4-8', displayName: 'Opus 4.8' }]);
+    expect(models).toEqual([
+      { id: 'claude-opus-4-8', displayName: 'Opus 4.8', contextWindow: 1_000_000 },
+    ]);
   });
 
   it('falls back to the static allowlist offline', async () => {

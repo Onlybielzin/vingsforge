@@ -107,7 +107,10 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
   const [conversation, setConversation] = useState<ConversationState>(emptyConversation());
   const [model, setModel] = useState<ModelId>('claude-opus-4-8');
   const [runtimeId, setRuntimeId] = useState<string>('local');
-  const [agentMode, setAgentMode] = useState<AgentMode>('default');
+  // Abre sempre em Bypass: os modos Padrão/Edições dependem do protocolo de
+  // controle de permissão (control_request), que o runner ainda não trata —
+  // sem isso uma tool que pede aprovação trava em "running". Bypass não pergunta.
+  const [agentMode, setAgentMode] = useState<AgentMode>('bypass');
   const [rightPanel, setRightPanel] = useState<'explorer' | 'detail' | 'worktrees' | null>('explorer');
   const [detail, setDetail] = useState<DetailContent | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
