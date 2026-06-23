@@ -331,7 +331,13 @@ function resolveApi(
 }
 
 function broadcast(clients: Set<WebSocket>, frame: ServerMsg): void {
-  const data = JSON.stringify(frame);
+  let data: string;
+  try {
+    data = JSON.stringify(frame);
+  } catch {
+    // An un-serializable event frame must never crash the fan-out; skip it.
+    return;
+  }
   for (const ws of clients) {
     if (ws.readyState === ws.OPEN) ws.send(data);
   }

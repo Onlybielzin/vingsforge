@@ -137,11 +137,45 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
   // On turn.end we also re-read engine meta, since the CLI re-advertises its
   // slash commands / skills on each turn's init (Objetivo 1).
   useEffect(() => {
-    return ipc.engine.onEvent((event) => {
-      if (event.type === 'turn.end') void refreshMeta();
-      if ('chatId' in event && event.chatId !== activeChatRef.current) return;
-      setConversation((prev) => reduceEvent(prev, event));
+    // Watchdog: if a turn is "streaming" but no engine event arrives for this
+    // long, it's stuck (a lost result/turn.end, or the host/transport stalled).
+    // We interrupt it and surface an error so the UI never spins forever.
+    const STALL_MS = 120_000;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const disarm = (): void => {
+      if (watchdog) clearTimeout(watchdog);
+      watchdog = undefined;
+    };
+    const arm = (): void => {
+      disarm();
+      watchdog = setTimeout(() => {
+        setConversation((prev) => {
+          if (!prev.streaming) return prev; // turn already ended — nothing stuck
+          const chatId = activeChatRef.current;
+          if (chatId) void ipc.chats.interrupt(chatId);
+          return reduceEvent(prev, {
+            type: 'error',
+            chatId: prev.chatId ?? chatId ?? '',
+            message: 'O turno parou de responder (2 min sem eventos) e foi interrompido. Reenvie a mensagem.',
+          });
+        });
+      }, STALL_MS);
+    };
+    const off = ipc.engine.onEvent((event) => {
+      try {
+        if (event.type === 'turn.end') void refreshMeta();
+        if ('chatId' in event && event.chatId !== activeChatRef.current) return;
+        setConversation((prev) => reduceEvent(prev, event));
+      } catch {
+        // A single malformed event must never freeze the whole stream.
+      }
+      // Re-arm on every event; the timeout no-ops if the turn already ended.
+      arm();
     });
+    return () => {
+      disarm();
+      off();
+    };
   }, [ipc, refreshMeta]);
 
   // Initial load.

@@ -340,7 +340,15 @@ export async function createHost(opts?: {
   // Single event bus: chat-store events fan out to connected UI clients.
   const listeners = new Set<(event: EngineEvent) => void>();
   function emitEvent(event: EngineEvent): void {
-    for (const l of listeners) l(event);
+    // One listener throwing (e.g. a WS send/serialize failure) must not stop the
+    // others or bubble back into the engine reader and stall the turn.
+    for (const l of listeners) {
+      try {
+        l(event);
+      } catch (err) {
+        log(`event listener error: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
   chatStore.onEvent(emitEvent);
 

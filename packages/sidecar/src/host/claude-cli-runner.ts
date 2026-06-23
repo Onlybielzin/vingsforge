@@ -308,12 +308,18 @@ function runChild(p: RunChildParams): Promise<TurnResult> {
 
     const rl = createInterface({ input: child.stdout });
     rl.on('line', (line: string) => {
-      const outcome = mapStreamLine(line, ctx);
-      if (outcome === undefined) return;
-      if (outcome.usage !== undefined) usage = outcome.usage;
-      if (outcome.stopReason !== undefined) stopReason = outcome.stopReason;
-      if (outcome.error !== undefined) errorMessage = outcome.error;
-      if (outcome.isResult) sawResult = true;
+      // A single malformed/oversized line must never throw out of the reader and
+      // stall the turn — that leaves the UI spinning forever. Isolate per line.
+      try {
+        const outcome = mapStreamLine(line, ctx);
+        if (outcome === undefined) return;
+        if (outcome.usage !== undefined) usage = outcome.usage;
+        if (outcome.stopReason !== undefined) stopReason = outcome.stopReason;
+        if (outcome.error !== undefined) errorMessage = outcome.error;
+        if (outcome.isResult) sawResult = true;
+      } catch (err) {
+        p.log(`stream line dropped: ${err instanceof Error ? err.message : String(err)}`);
+      }
     });
 
     // Keep a small tail of stderr to explain a non-zero exit.
