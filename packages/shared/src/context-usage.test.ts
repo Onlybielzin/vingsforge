@@ -11,6 +11,7 @@ import {
   DEFAULT_CONTEXT_WINDOW,
   computeContextMeter,
   contextWindowFor,
+  totalTokens,
   usedContextTokens,
 } from './context-usage.js';
 
@@ -214,5 +215,35 @@ describe('computeContextMeter', () => {
     );
     expect(meter!.percent).toBe(50);
     expect(meter!.state).toBe('warning');
+  });
+});
+
+describe('totalTokens', () => {
+  it('returns 0 for undefined', () => {
+    expect(totalTokens(undefined)).toBe(0);
+  });
+
+  it('sums input + output + cache-read + cache-creation', () => {
+    expect(
+      totalTokens(
+        usage({
+          inputTokens: 100,
+          outputTokens: 40,
+          cacheReadInputTokens: 1000,
+          cacheCreationInputTokens: 7,
+        }),
+      ),
+    ).toBe(1147);
+  });
+
+  it('includes output (unlike usedContextTokens, which omits it)', () => {
+    const u = usage({ inputTokens: 100, outputTokens: 40 });
+    expect(usedContextTokens(u)).toBe(100);
+    expect(totalTokens(u)).toBe(140);
+  });
+
+  it('ignores dirty/negative/NaN fields (no NaN leak)', () => {
+    const u = { inputTokens: 50, outputTokens: NaN, cacheReadInputTokens: -10 } as unknown as Usage;
+    expect(totalTokens(u)).toBe(50);
   });
 });

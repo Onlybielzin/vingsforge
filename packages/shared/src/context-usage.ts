@@ -66,6 +66,23 @@ export function usedContextTokens(usage: Usage | undefined): number {
   return n(usage.inputTokens) + n(usage.cacheReadInputTokens) + n(usage.cacheCreationInputTokens);
 }
 
+/**
+ * Total tokens spent for a `usage`: input + output + cache-read + cache-creation.
+ * This is the headline "tokens gastos" number (everything the request moved),
+ * unlike {@link usedContextTokens} which omits output (it measures occupancy).
+ * Tolerant of absent/dirty fields.
+ */
+export function totalTokens(usage: Usage | undefined): number {
+  if (!usage) return 0;
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
+  return (
+    n(usage.inputTokens) +
+    n(usage.outputTokens) +
+    n(usage.cacheReadInputTokens) +
+    n(usage.cacheCreationInputTokens)
+  );
+}
+
 /** Map a used-percentage to its color band. */
 function meterState(percent: number): ContextMeterState {
   if (percent < 50) return 'healthy';

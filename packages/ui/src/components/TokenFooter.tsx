@@ -4,6 +4,7 @@
  */
 import type { CSSProperties } from 'react';
 import type { ModelId, Usage } from '@vingsforge/shared';
+import { totalTokens } from '@vingsforge/shared';
 import { ContextMeter } from './ContextMeter.js';
 
 export interface TokenFooterProps {
@@ -30,11 +31,17 @@ export function TokenFooter({
   return (
     <div style={shell}>
       <ContextMeter {...(contextUsage ? { usage: contextUsage } : {})} {...(model ? { model } : {})} />
+      <span style={group}>
+        <span style={label}>tokens</span>
+        <span style={total}>{fmt(totalTokens(sessionUsage))}</span>
+      </span>
       {turnUsage ? (
         <span style={group}>
           <span style={label}>turn</span>
           <span style={value}>
             {fmt(turnUsage.inputTokens)} in · {fmt(turnUsage.outputTokens)} out
+            {' · '}
+            {fmt(totalTokens(turnUsage))} total
           </span>
         </span>
       ) : null}
@@ -66,3 +73,4 @@ const shell: CSSProperties = {
 const group: CSSProperties = { display: 'inline-flex', gap: 6, alignItems: 'baseline' };
 const label: CSSProperties = { color: 'var(--vf-text-faint)', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10 };
 const value: CSSProperties = { fontFamily: 'var(--vf-mono)' };
+const total: CSSProperties = { fontFamily: 'var(--vf-mono)', color: 'var(--vf-accent)', fontWeight: 600 };
