@@ -268,7 +268,8 @@ class MockEngine implements EngineChannel {
     );
   }
 
-  private emit(event: EngineEvent): void {
+  /** Emit an arbitrary engine event (used by the mock UpdateAPI for update.* logs). */
+  emit(event: EngineEvent): void {
     for (const l of this.listeners) l(event);
   }
 
@@ -455,6 +456,45 @@ export function createMockIpcClient(): IpcClient {
       async remove(id) {
         const i = runtimes.findIndex((r) => r.id === id);
         if (i >= 0) runtimes.splice(i, 1);
+      },
+    },
+    meta: {
+      async meta() {
+        return {
+          slashCommands: ['code-review', 'init', 'compact', 'clear', 'context'],
+          skills: ['createmd', 'efeitos-web', 'deep-research'],
+        };
+      },
+    },
+    update: {
+      async status() {
+        return {
+          behind: 2,
+          current: 'a1b2c3d',
+          latest: 'f0e9d8c',
+          repoDir: settings.repoDir ?? '/home/vings/Área de trabalho/projetos/claude tools',
+          available: true,
+        };
+      },
+      async run() {
+        // Stream a few fake log lines then a terminal done, mirroring the host.
+        let step = 0;
+        const lines = [
+          'git pull --ff-only',
+          'pnpm install',
+          'pnpm --filter @vingsforge/sidecar build',
+          'pnpm tauri build',
+        ];
+        const tick = (): void => {
+          if (step < lines.length) {
+            engine.emit({ type: 'update.log', stream: 'stdout', line: lines[step]! });
+            step += 1;
+            setTimeout(tick, 200);
+          } else {
+            engine.emit({ type: 'update.done', ok: true });
+          }
+        };
+        setTimeout(tick, 200);
       },
     },
     settings: {

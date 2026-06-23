@@ -39,6 +39,8 @@ import {
   makeClaudeCliRunner,
   type ClaudeAuth,
 } from './claude-cli-runner.js';
+import { EngineMetaStore } from './engine-meta.js';
+import { Updater, DEFAULT_REPO_DIR } from './updater.js';
 import { SettingsStore } from '../settings/settings-store.js';
 import { LibSecretStore } from '../settings/secret-store.js';
 import { ANTHROPIC_API_KEY_REF } from '../settings/secret-store.js';
@@ -160,6 +162,9 @@ export async function createHost(opts?: {
   // Pending permission gates + per-chat remembered allows (session scope).
   const pending = new PendingPermissions();
   const remembered = new Map<string, Set<string>>();
+
+  // Caches the slash commands / skills the `claude` CLI advertises on init.
+  const engineMeta = new EngineMetaStore();
 
   /** Apply remembered "always allow" tools onto a chat's effective policy. */
   function withRemembered(chatId: string, policy: PermissionPolicy): PermissionPolicy {
@@ -307,6 +312,8 @@ export async function createHost(opts?: {
       }
       return { authMode: 'plan' };
     },
+    // Cache the CLI's advertised slash commands / skills for the EngineMetaAPI.
+    onMeta: (meta) => engineMeta.set(meta),
     log,
   });
 
@@ -327,6 +334,17 @@ export async function createHost(opts?: {
     for (const l of listeners) l(event);
   }
   chatStore.onEvent(emitEvent);
+
+  // In-app git auto-updater. The repo dir comes from Settings (validated inside
+  // the Updater); progress streams to the UI as update.log / update.done events.
+  const updater = new Updater({
+    resolveRepoDir: async () => {
+      const { repoDir } = await settings.get();
+      return repoDir && repoDir.trim().length > 0 ? repoDir : DEFAULT_REPO_DIR;
+    },
+    emit: emitEvent,
+    log,
+  });
 
   // Apply UI commands: interrupt a turn, or resolve a pending permission gate.
   function applyCommand(command: EngineCommand): void {
@@ -357,6 +375,8 @@ export async function createHost(opts?: {
     chats: bindApi(chatStore),
     runtimes: bindApi(runtimes),
     settings: bindApi(settings),
+    meta: bindApi(engineMeta),
+    update: bindApi(updater),
   };
   const port = opts?.port ?? (Number(process.env.PORT) || DEFAULT_SIDECAR_PORT);
   const authToken = opts?.authToken ?? process.env[LOCAL_AUTH_TOKEN_ENV];

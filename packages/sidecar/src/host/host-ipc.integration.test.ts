@@ -213,6 +213,10 @@ function resolveApi(apis: HostApis, name: LocalApi): Record<string, (...a: unkno
       return apis.runtimes;
     case 'settings':
       return apis.settings;
+    case 'meta':
+      return apis.meta;
+    case 'update':
+      return apis.update;
     default: {
       const exhaustive: never = name;
       throw new Error(`unknown api: ${String(exhaustive)}`);
@@ -405,6 +409,8 @@ function makeBackend(opts: {
     chats: bindApi(chatStore),
     runtimes: bindApi({ list: () => [] }),
     settings: bindApi({}),
+    meta: bindApi({ meta: () => ({ slashCommands: [], skills: [] }) }),
+    update: bindApi({}),
   };
 
   // The real client constructs the socket via WebSocketImpl; we grab that exact

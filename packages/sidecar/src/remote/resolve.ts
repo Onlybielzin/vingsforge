@@ -93,7 +93,8 @@ function runRemoteTurn(
     // Bridge this chat's daemon events to the chat bus and detect turn end. The
     // client already deduped by seq, so re-emit verbatim.
     unsubscribe = runtimes.onTurnEvent((event) => {
-      if (event.chatId !== input.chatId) return;
+      // update.* events ride the same bus but carry no chatId — never a turn event.
+      if (!('chatId' in event) || event.chatId !== input.chatId) return;
       emit(event);
       if (event.type === 'turn.end') {
         finish({ stopReason: stopReasonOf(event.stopReason), usage: event.usage });

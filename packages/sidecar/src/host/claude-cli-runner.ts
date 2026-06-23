@@ -85,6 +85,12 @@ export interface ClaudeCliRunnerDeps {
   /** stderr-only logger (never receives the API key). Optional. */
   log?(message: string): void;
   /**
+   * Called whenever a `system/init` event advertises the CLI's slash commands /
+   * skills, so the host can cache them and expose them to the UI (EngineMetaAPI).
+   * Optional; absent in tests that don't care about meta.
+   */
+  onMeta?(meta: { slashCommands: string[]; skills: string[] }): void;
+  /**
    * Spawn hook (tests inject a fake). Defaults to `node:child_process.spawn`.
    * Mirrors the exact call the runner makes so tests can assert args/env.
    */
@@ -199,6 +205,7 @@ export function makeClaudeCliRunner(
       persistToolResults: input.persistToolResults,
       model,
       onSession: (sid) => sessions.set(chatId, sid),
+      onMeta: deps.onMeta,
       log,
     });
   };
@@ -217,6 +224,7 @@ interface RunChildParams {
   persistToolResults: EngineTurnInput['persistToolResults'];
   model: ModelId;
   onSession: (sessionId: string) => void;
+  onMeta: ((meta: { slashCommands: string[]; skills: string[] }) => void) | undefined;
   log: (message: string) => void;
 }
 
@@ -262,6 +270,7 @@ function runChild(p: RunChildParams): Promise<TurnResult> {
       persistAssistant: p.persistAssistant,
       persistToolResults: p.persistToolResults,
       onSession: p.onSession,
+      onMeta: p.onMeta,
     };
 
     const rl = createInterface({ input: child.stdout });
@@ -335,6 +344,8 @@ export interface HandleCtx {
   persistAssistant: EngineTurnInput['persistAssistant'];
   persistToolResults: EngineTurnInput['persistToolResults'];
   onSession: (sessionId: string) => void;
+  /** Optional sink for the CLI's advertised slash commands / skills (init event). */
+  onMeta: ((meta: { slashCommands: string[]; skills: string[] }) => void) | undefined;
 }
 
 /** What the host's child-lifecycle loop needs to know after a mapped event. */
@@ -344,6 +355,8 @@ export interface HandleOutcome {
   stopReason?: EngineStopReason;
   error?: string;
   isResult?: boolean;
+  /** Slash commands / skills advertised by a `system/init` event, if present. */
+  meta?: { slashCommands: string[]; skills: string[] };
 }
 
 /** Aggregated result of feeding a whole NDJSON stream through the mapper. */
@@ -358,6 +371,8 @@ export interface MappedStream {
   error?: string;
   /** Whether a terminal `result` event was seen. */
   sawResult: boolean;
+  /** Slash commands / skills from the last `system/init`, if any. */
+  meta?: { slashCommands: string[]; skills: string[] };
 }
 
 /**
@@ -381,6 +396,7 @@ export function mapStreamLine(line: string, ctx: HandleCtx): HandleOutcome | und
   }
   const outcome = handleStreamEvent(event, ctx);
   if (outcome.sessionId !== undefined) ctx.onSession(outcome.sessionId);
+  if (outcome.meta !== undefined) ctx.onMeta?.(outcome.meta);
   return outcome;
 }
 
@@ -405,6 +421,7 @@ export function mapStreamLines(lines: readonly string[], ctx: HandleCtx): Mapped
     if (outcome.stopReason !== undefined) agg.stopReason = outcome.stopReason;
     if (outcome.error !== undefined) agg.error = outcome.error;
     if (outcome.isResult) agg.sawResult = true;
+    if (outcome.meta !== undefined) agg.meta = outcome.meta;
   }
   return agg;
 }
@@ -429,10 +446,23 @@ function handleStreamEvent(event: ClaudeStreamEvent, ctx: HandleCtx): HandleOutc
 }
 
 function handleSystem(event: ClaudeStreamEvent): HandleOutcome {
-  if (event.subtype === 'init' && typeof event.session_id === 'string') {
-    return { sessionId: event.session_id };
+  if (event.subtype !== 'init') return {};
+  const out: HandleOutcome = {};
+  if (typeof event.session_id === 'string') out.sessionId = event.session_id;
+  // The init event advertises the CLI's slash commands + skills (and agents).
+  // Capture the string arrays defensively — fields may be absent on older CLIs.
+  const slashCommands = stringArray(event.slash_commands);
+  const skills = stringArray(event.skills);
+  if (slashCommands.length > 0 || skills.length > 0) {
+    out.meta = { slashCommands, skills };
   }
-  return {};
+  return out;
+}
+
+/** Coerce an unknown stream-json field into a clean `string[]` (drops non-strings). */
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string' && v.length > 0);
 }
 
 function handleAssistant(event: ClaudeStreamEvent, ctx: HandleCtx): HandleOutcome {
@@ -730,6 +760,9 @@ interface ClaudeStreamEvent {
   type: 'system' | 'assistant' | 'user' | 'result' | 'rate_limit_event' | string;
   subtype?: string;
   session_id?: string;
+  /** `system/init` advertises these capability arrays (loosely typed). */
+  slash_commands?: unknown;
+  skills?: unknown;
   message?: ClaudeMessage;
   is_error?: boolean;
   result?: string;

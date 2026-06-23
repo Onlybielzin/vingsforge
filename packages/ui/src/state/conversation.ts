@@ -219,6 +219,10 @@ export function reduceEvent(state: ConversationState, event: EngineEvent): Conve
       next.streaming = false;
       return next;
     }
+    default:
+      // update.log / update.done ride the same channel but carry no chatId and
+      // are consumed by the updater UI, not the conversation reducer.
+      return state;
   }
 }
 

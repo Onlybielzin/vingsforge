@@ -23,6 +23,10 @@ export interface ConversationProps {
   agentMode: AgentMode;
   showThinking: boolean;
   showCost: boolean;
+  /** CLI-advertised slash commands for the input `/` popup (Objetivo 1). */
+  slashCommands: string[];
+  /** CLI-advertised skills for the input `/` popup (Objetivo 1). */
+  skills: string[];
   onModelChange(model: string): void;
   onRuntimeChange(id: string): void;
   onAgentModeChange(m: AgentMode): void;
@@ -79,6 +83,8 @@ export function Conversation(props: ConversationProps): JSX.Element {
         runtimeId={props.runtimeId}
         agentMode={props.agentMode}
         streaming={conversation.streaming}
+        slashCommands={props.slashCommands}
+        skills={props.skills}
         onModelChange={props.onModelChange}
         onRuntimeChange={props.onRuntimeChange}
         onAgentModeChange={props.onAgentModeChange}

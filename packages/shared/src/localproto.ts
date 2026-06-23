@@ -49,8 +49,14 @@ export const LOCAL_AUTH_TOKEN_GLOBAL = '__VINGSFORGE_LOCAL_TOKEN__';
 /** Bumped on any breaking change to the frames below. */
 export const LOCAL_PROTOCOL_VERSION = 1 as const;
 
-/** The four request/response APIs reachable over RPC. */
-export type LocalApi = 'projects' | 'chats' | 'runtimes' | 'settings';
+/** The request/response APIs reachable over RPC. */
+export type LocalApi =
+  | 'projects'
+  | 'chats'
+  | 'runtimes'
+  | 'settings'
+  | 'meta'
+  | 'update';
 
 /** An RPC error surfaced back to the caller (never carries secrets). */
 export interface LocalRpcError {

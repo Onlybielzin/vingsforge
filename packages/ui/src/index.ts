@@ -60,3 +60,28 @@ export { Markdown, CodeBlock } from './components/Markdown.js';
 export { Icon, type IconName, type IconProps } from './components/Icon.js';
 export { ApiKeyOnboarding, type ApiKeyOnboardingProps } from './components/ApiKeyOnboarding.js';
 export { DemoModeBanner } from './components/DemoModeBanner.js';
+export { SettingsScreen, type SettingsScreenProps } from './components/SettingsScreen.js';
+export {
+  UpdateBanner,
+  type UpdateBannerProps,
+  UpdateModal,
+  type UpdateModalProps,
+} from './components/UpdatePanel.js';
+export {
+  computeSlashPopup,
+  completeSlash,
+  parseSlashQuery,
+  clampIndex,
+  BUILTIN_SLASH_COMMANDS,
+  type SlashEntry,
+  type SlashPopupState,
+} from './components/slashPopup.js';
+export {
+  reduceUpdate,
+  startUpdate,
+  idleUpdate,
+  updateBannerText,
+  type UpdateRunState,
+  type UpdatePhase,
+  type UpdateLogLine,
+} from './components/updateState.js';

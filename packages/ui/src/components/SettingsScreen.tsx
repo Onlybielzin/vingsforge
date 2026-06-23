@@ -12,7 +12,7 @@
  * in sync. The key value is never logged.
  */
 import { useState, type CSSProperties } from 'react';
-import type { Effort, GlobalSettings, ModelInfo } from '@vingsforge/shared';
+import type { Effort, GlobalSettings, ModelInfo, UpdateStatus } from '@vingsforge/shared';
 import type { IpcClient } from '../ipc/client.js';
 import { applyTheme } from '../theme/tokens.js';
 import { Icon } from './Icon.js';
@@ -25,9 +25,16 @@ export interface SettingsScreenProps {
   models: ModelInfo[];
   /** Re-read settings into the host store after any persisted change. */
   onChanged(): void | Promise<void>;
+  /** Re-probe the checkout for available updates (Objetivo 2); returns the result. */
+  onCheckUpdate(): Promise<UpdateStatus | null>;
   /** Close the modal. */
   onClose(): void;
 }
+
+type UpdateCheckState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'result'; status: UpdateStatus | null };
 
 type TestState =
   | { kind: 'idle' }
@@ -49,11 +56,15 @@ export function SettingsScreen({
   settings,
   models,
   onChanged,
+  onCheckUpdate,
   onClose,
 }: SettingsScreenProps): JSX.Element {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
+  // Controlled repo-dir field, seeded from settings; persisted on blur/Enter.
+  const [repoDir, setRepoDir] = useState(settings?.repoDir ?? '');
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheckState>({ kind: 'idle' });
 
   const authMode = settings?.authMode ?? 'plan';
   const apiKeyPresent = settings?.apiKeyPresent ?? false;
@@ -130,6 +141,21 @@ export function SettingsScreen({
     } finally {
       setBusy(false);
     }
+  };
+
+  // Persist the repo dir only when it actually changed (empty clears it).
+  const saveRepoDir = async (): Promise<void> => {
+    const next = repoDir.trim();
+    if (next === (settings?.repoDir ?? '')) return;
+    await patch({ repoDir: next });
+  };
+
+  const checkUpdate = async (): Promise<void> => {
+    setUpdateCheck({ kind: 'checking' });
+    // Persist any pending repo-dir edit first so the probe runs against it.
+    await saveRepoDir();
+    const status = await onCheckUpdate();
+    setUpdateCheck({ kind: 'result', status });
   };
 
   return (
@@ -317,6 +343,60 @@ export function SettingsScreen({
               checked={settings?.showCost ?? true}
               onChange={(v) => void patch({ showCost: v })}
             />
+          </section>
+
+          {/* Auto-update (Objetivo 2) */}
+          <section style={group}>
+            <h3 style={groupTitle}>Atualização automática</h3>
+            <div style={field}>
+              <label style={label} htmlFor="vf-settings-repodir">
+                Pasta do repositório (auto-update)
+              </label>
+              <input
+                id="vf-settings-repodir"
+                style={input}
+                type="text"
+                spellCheck={false}
+                placeholder="/caminho/para/o/checkout"
+                value={repoDir}
+                onChange={(e) => setRepoDir(e.target.value)}
+                onBlur={() => void saveRepoDir()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveRepoDir();
+                }}
+              />
+            </div>
+
+            <div style={actions}>
+              <button
+                type="button"
+                style={secondaryBtn}
+                disabled={updateCheck.kind === 'checking'}
+                onClick={() => void checkUpdate()}
+              >
+                {updateCheck.kind === 'checking' ? 'Verificando…' : 'Verificar atualização'}
+              </button>
+            </div>
+
+            <div style={status} aria-live="polite">
+              {updateCheck.kind === 'result' && updateCheck.status === null && (
+                <span style={errStyle}>
+                  <Icon name="cross" size={14} /> Não foi possível verificar (repositório inválido?).
+                </span>
+              )}
+              {updateCheck.kind === 'result' && updateCheck.status && updateCheck.status.available && (
+                <span style={okStyle}>
+                  <Icon name="check" size={14} /> {updateCheck.status.behind}{' '}
+                  {updateCheck.status.behind === 1 ? 'commit' : 'commits'} atrás (
+                  {updateCheck.status.current} → {updateCheck.status.latest}).
+                </span>
+              )}
+              {updateCheck.kind === 'result' && updateCheck.status && !updateCheck.status.available && (
+                <span style={{ color: 'var(--vf-text-muted)', fontSize: 13 }}>
+                  Já está atualizado ({updateCheck.status.current}).
+                </span>
+              )}
+            </div>
           </section>
         </div>
 

@@ -60,12 +60,14 @@ export interface GateResolution {
   remember?: boolean;
 }
 
-/** The four APIs the host routes RPC onto (method dispatch is dynamic). */
+/** The APIs the host routes RPC onto (method dispatch is dynamic). */
 export interface HostApis {
   projects: Record<string, (...args: unknown[]) => unknown>;
   chats: Record<string, (...args: unknown[]) => unknown>;
   runtimes: Record<string, (...args: unknown[]) => unknown>;
   settings: Record<string, (...args: unknown[]) => unknown>;
+  meta: Record<string, (...args: unknown[]) => unknown>;
+  update: Record<string, (...args: unknown[]) => unknown>;
 }
 
 /**
@@ -317,6 +319,10 @@ function resolveApi(
       return apis.runtimes;
     case 'settings':
       return apis.settings;
+    case 'meta':
+      return apis.meta;
+    case 'update':
+      return apis.update;
     default: {
       const exhaustive: never = name;
       throw new Error(`unknown api: ${String(exhaustive)}`);

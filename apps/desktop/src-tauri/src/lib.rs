@@ -58,8 +58,17 @@ const HOST_REL_PATH: &str = "packages/sidecar/dist/host/host.js";
 /// `apps/desktop/src-tauri` (or `apps/desktop`), and for a plain `cargo run`
 /// it may be the crate dir — in every case the repo root is some ancestor, so
 /// climbing parents until we find the host is robust across those layouts.
-fn locate_host() -> Option<PathBuf> {
-    // 1. Explicit override.
+fn locate_host(app: &tauri::AppHandle) -> Option<PathBuf> {
+    // 1. Bundled resource (installed app): the self-contained sidecar deploy is
+    //    shipped under <resources>/sidecar (see tauri.conf `bundle.resources`).
+    if let Ok(res) = app.path().resource_dir() {
+        let candidate = res.join("sidecar").join("dist/host/host.js");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 2. Explicit override.
     if let Ok(explicit) = std::env::var("VINGSFORGE_SIDECAR") {
         let p = PathBuf::from(explicit);
         if p.is_file() {
@@ -71,7 +80,7 @@ fn locate_host() -> Option<PathBuf> {
         );
     }
 
-    // 2. Walk up from CWD looking for the host under the repo root.
+    // 3. Walk up from CWD looking for the host under the repo root (dev).
     let cwd = std::env::current_dir().ok()?;
     let mut dir: Option<&Path> = Some(cwd.as_path());
     while let Some(d) = dir {
@@ -85,12 +94,49 @@ fn locate_host() -> Option<PathBuf> {
     None
 }
 
+/// Resolve an absolute path to the `node` binary. An installed app launched from
+/// a desktop menu inherits a minimal PATH that usually lacks nvm — so we search
+/// explicit locations (env override, system dirs, then the newest nvm version)
+/// and fall back to the bare name (PATH lookup) only as a last resort.
+fn locate_node() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("VINGSFORGE_NODE") {
+        let pb = PathBuf::from(p);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+    // Prefer the newest nvm Node FIRST: the bundled native modules (better-sqlite3)
+    // are compiled against it, so the ABI (NODE_MODULE_VERSION) must match. A
+    // system /usr/bin/node of a different major version would fail to load them.
+    if let Some(home) = std::env::var_os("HOME") {
+        let nvm = PathBuf::from(home).join(".nvm/versions/node");
+        if let Ok(entries) = std::fs::read_dir(&nvm) {
+            let mut versions: Vec<PathBuf> = entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.join("bin/node").is_file())
+                .collect();
+            // Lexicographic sort is good enough here (v20.x > v18.x for our range).
+            versions.sort();
+            if let Some(latest) = versions.last() {
+                return Some(latest.join("bin/node"));
+            }
+        }
+    }
+    for c in ["/usr/local/bin/node", "/usr/bin/node", "/bin/node"] {
+        let pb = PathBuf::from(c);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+    None
+}
+
 /// Spawn the REAL Node sidecar host and stream its logs with a `[sidecar]` prefix.
 ///
 /// Tolerant to failure: if `node` or `host.js` is missing we log and return, and
 /// the WebView UI falls back to its mock IPC (packages/ui/src/ipc bootstrap).
 fn spawn_sidecar(app: &tauri::AppHandle, auth_token: &str) {
-    let host = match locate_host() {
+    let host = match locate_host(app) {
         Some(h) => h,
         None => {
             eprintln!(
@@ -103,15 +149,39 @@ fn spawn_sidecar(app: &tauri::AppHandle, auth_token: &str) {
     };
 
     let host_str = host.to_string_lossy().to_string();
-    eprintln!("[sidecar] launching node {host_str} (PORT={DEFAULT_SIDECAR_PORT})");
+    let node = locate_node();
+    let node_str = node
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "node".to_string());
 
-    // Use the shell plugin's program runner for `node` (sidecar `Command` is for
-    // bundled externalBin only). This streams stdout/stderr back to us as events.
+    // An installed app inherits a minimal PATH. Build one that lets the host find
+    // `claude` (~/.local/bin) and any child node tooling: node's own dir first,
+    // then ~/.local/bin and the usual system dirs, then whatever PATH we have.
+    let mut path_parts: Vec<String> = Vec::new();
+    if let Some(nd) = node.as_ref().and_then(|p| p.parent()) {
+        path_parts.push(nd.to_string_lossy().to_string());
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        path_parts.push(PathBuf::from(home).join(".local/bin").to_string_lossy().to_string());
+    }
+    path_parts.push("/usr/local/bin".to_string());
+    path_parts.push("/usr/bin".to_string());
+    path_parts.push("/bin".to_string());
+    if let Ok(existing) = std::env::var("PATH") {
+        path_parts.push(existing);
+    }
+    let child_path = path_parts.join(":");
+
+    eprintln!("[sidecar] launching {node_str} {host_str} (PORT={DEFAULT_SIDECAR_PORT})");
+
+    // Stream the host's stdout/stderr back to us as events.
     let command = app
         .shell()
-        .command("node")
+        .command(node_str)
         .args([host_str.as_str()])
         .env("PORT", DEFAULT_SIDECAR_PORT)
+        .env("PATH", child_path)
         // The host refuses to start (and to accept any connection) without this.
         .env(LOCAL_AUTH_TOKEN_ENV, auth_token);
 

@@ -31,7 +31,15 @@ export type EngineEvent =
       isError: boolean;
     }
   | { type: 'turn.end'; chatId: string; stopReason: string; usage: Usage }
-  | { type: 'error'; chatId: string; message: string };
+  | { type: 'error'; chatId: string; message: string }
+  /**
+   * A line of progress output from the in-app git auto-updater (UpdateAPI.run).
+   * `stream` distinguishes the update script's stdout from its stderr. Not tied
+   * to any chat — it rides the same event channel so the UI gets live logs.
+   */
+  | { type: 'update.log'; line: string; stream: 'stdout' | 'stderr' }
+  /** Terminal event for an update run: `ok` is false when the script failed. */
+  | { type: 'update.done'; ok: boolean; message?: string };
 
 /** Stop reasons the engine surfaces in turn.end (Spec 03 §4-§5). */
 export type EngineStopReason =

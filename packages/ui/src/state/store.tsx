@@ -21,6 +21,7 @@ import type {
   ModelInfo,
   Project,
   RemoteRuntime,
+  UpdateStatus,
 } from '@vingsforge/shared';
 import { agentModeToModes } from '@vingsforge/shared';
 import type { IpcClient } from '../ipc/client.js';
@@ -52,9 +53,17 @@ export interface AppStore {
   detail: DetailContent | null;
   /** Whether the settings modal is open (Spec 07 §3). */
   settingsOpen: boolean;
+  /** Slash commands the CLI advertised on its last init (Objetivo 1). */
+  slashCommands: string[];
+  /** Skills the CLI advertised on its last init (Objetivo 1). */
+  skills: string[];
+  /** Latest auto-update probe (Objetivo 2); null until the boot probe resolves. */
+  updateStatus: UpdateStatus | null;
 
   /** Re-reads global settings (e.g. after the API key is saved). */
   refreshSettings(): Promise<void>;
+  /** Re-probes the checkout for available updates (Objetivo 2). */
+  refreshUpdateStatus(): Promise<UpdateStatus | null>;
   selectProject(id: string): Promise<void>;
   selectChat(id: string): Promise<void>;
   newProject(): Promise<void>;
@@ -92,17 +101,35 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
   const [rightPanel, setRightPanel] = useState<'explorer' | 'detail' | 'worktrees' | null>('explorer');
   const [detail, setDetail] = useState<DetailContent | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [slashCommands, setSlashCommands] = useState<string[]>([]);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const activeChatRef = useRef<string | null>(null);
   activeChatRef.current = activeChatId;
 
+  // Pulls the latest CLI-advertised slash commands / skills into the store so
+  // the input popup reflects what the engine actually offers (Objetivo 1).
+  const refreshMeta = useCallback(async () => {
+    try {
+      const meta = await ipc.meta.meta();
+      setSlashCommands(meta.slashCommands);
+      setSkills(meta.skills);
+    } catch {
+      // Best-effort: the popup falls back to built-ins when meta is unavailable.
+    }
+  }, [ipc]);
+
   // Subscribe to the engine stream once; route events to the active conversation.
+  // On turn.end we also re-read engine meta, since the CLI re-advertises its
+  // slash commands / skills on each turn's init (Objetivo 1).
   useEffect(() => {
     return ipc.engine.onEvent((event) => {
+      if (event.type === 'turn.end') void refreshMeta();
       if ('chatId' in event && event.chatId !== activeChatRef.current) return;
       setConversation((prev) => reduceEvent(prev, event));
     });
-  }, [ipc]);
+  }, [ipc, refreshMeta]);
 
   // Initial load.
   useEffect(() => {
@@ -122,12 +149,32 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       const target = p.find((x) => x.id === last) ?? p[0];
       if (target) await doSelectProject(target.id, p);
     })();
+    // Probe for an available auto-update on boot (Objetivo 2). Best-effort: a
+    // failed probe (no repo configured, offline) just leaves the banner hidden.
+    void (async () => {
+      try {
+        setUpdateStatus(await ipc.update.status());
+      } catch {
+        setUpdateStatus(null);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ipc]);
 
   const refreshSettings = useCallback(async () => {
     const s = await ipc.settings.get();
     setSettings(s);
+  }, [ipc]);
+
+  const refreshUpdateStatus = useCallback(async (): Promise<UpdateStatus | null> => {
+    try {
+      const status = await ipc.update.status();
+      setUpdateStatus(status);
+      return status;
+    } catch {
+      setUpdateStatus(null);
+      return null;
+    }
   }, [ipc]);
 
   const doSelectProject = useCallback(
@@ -159,8 +206,10 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       setActiveChatId(id);
       setConversation(hydrateHistory(id, history));
       if (activeProjectId) localStorage.setItem(`${LAST_CHAT_KEY}.${activeProjectId}`, id);
+      // Load the CLI's advertised commands/skills for the input popup (Objetivo 1).
+      void refreshMeta();
     },
-    [ipc, activeProjectId],
+    [ipc, activeProjectId, refreshMeta],
   );
 
   const newProject = useCallback(async () => {
@@ -256,7 +305,11 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       rightPanel,
       detail,
       settingsOpen,
+      slashCommands,
+      skills,
+      updateStatus,
       refreshSettings,
+      refreshUpdateStatus,
       selectProject: (id) => doSelectProject(id),
       selectChat: doSelectChat,
       newProject,
@@ -288,7 +341,11 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       rightPanel,
       detail,
       settingsOpen,
+      slashCommands,
+      skills,
+      updateStatus,
       refreshSettings,
+      refreshUpdateStatus,
       openDetail,
       openSettings,
       closeSettings,

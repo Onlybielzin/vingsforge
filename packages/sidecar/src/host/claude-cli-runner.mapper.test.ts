@@ -19,6 +19,7 @@ interface Sink {
   persistedAssistant: ChatMessage[];
   persistedToolResults: ChatMessage[];
   sessions: string[];
+  metas: { slashCommands: string[]; skills: string[] }[];
 }
 
 /** Build a HandleCtx that records everything the mapper does. */
@@ -27,6 +28,7 @@ function makeSink(chatId = 'chat-1'): Sink {
   const persistedAssistant: ChatMessage[] = [];
   const persistedToolResults: ChatMessage[] = [];
   const sessions: string[] = [];
+  const metas: { slashCommands: string[]; skills: string[] }[] = [];
   const ctx: HandleCtx = {
     chatId,
     emit: (e) => events.push(e),
@@ -34,8 +36,9 @@ function makeSink(chatId = 'chat-1'): Sink {
     persistAssistant: (_id, m) => persistedAssistant.push(m),
     persistToolResults: (_id, m) => persistedToolResults.push(m),
     onSession: (sid) => sessions.push(sid),
+    onMeta: (m) => metas.push(m),
   };
-  return { ctx, events, persistedAssistant, persistedToolResults, sessions };
+  return { ctx, events, persistedAssistant, persistedToolResults, sessions, metas };
 }
 
 /** Serialize objects to NDJSON lines, the way the CLI writes them to stdout. */
@@ -300,5 +303,38 @@ describe('mapStreamLines (pure stream-json → EngineEvent mapper)', () => {
     expect(out.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
     expect(out.stopReason).toBe('end_turn');
     expect(s.events).toEqual([{ type: 'message.delta', chatId: 'chat-1', text: 'partial' }]);
+  });
+
+  it('captures slash_commands / skills from system/init via onMeta + aggregate', () => {
+    const s = makeSink();
+    const out = mapStreamLines(
+      ndjson({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'sess-meta',
+        slash_commands: ['code-review', 'init', 'compact', 42, ''],
+        skills: ['createmd', 'vault'],
+        agents: ['ignored'],
+      }),
+      s.ctx,
+    );
+
+    // Non-strings / empties are dropped; both onMeta and the aggregate get it.
+    const expected = {
+      slashCommands: ['code-review', 'init', 'compact'],
+      skills: ['createmd', 'vault'],
+    };
+    expect(s.metas).toEqual([expected]);
+    expect(out.meta).toEqual(expected);
+    expect(out.sessionId).toBe('sess-meta');
+  });
+
+  it('does not emit meta for an init event without slash_commands/skills', () => {
+    const s = makeSink();
+    mapStreamLines(
+      ndjson({ type: 'system', subtype: 'init', session_id: 'sess-x' }),
+      s.ctx,
+    );
+    expect(s.metas).toEqual([]);
   });
 });

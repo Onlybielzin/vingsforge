@@ -60,6 +60,50 @@ export interface ChatsAPI {
   delete(chatId: string): Promise<void>;
 }
 
+/**
+ * Engine metadata API — exposes the capabilities the `claude` CLI advertised on
+ * its last `system/init` event (its slash commands and skills). The host caches
+ * the arrays from each turn's init event; this returns the latest snapshot, or
+ * empty arrays when no turn has run yet.
+ */
+export interface EngineMetaAPI {
+  meta(): Promise<EngineMeta>;
+}
+
+/** Snapshot of the `claude` CLI's advertised slash commands / skills. */
+export interface EngineMeta {
+  slashCommands: string[];
+  skills: string[];
+}
+
+/**
+ * Self-update API — drives the in-app git auto-updater against the VingsForge
+ * checkout (Settings `repoDir`, or the app's built-in default). `status` is a
+ * read-only probe (git fetch + count of commits behind upstream); `run` kicks
+ * off the build/install pipeline whose progress streams over the engine event
+ * channel as `update.log` / `update.done` events. Neither interpolates user
+ * input into a shell — the repo dir comes from settings and is validated.
+ */
+export interface UpdateAPI {
+  status(): Promise<UpdateStatus>;
+  /** Starts the update pipeline; progress arrives as update.* engine events. */
+  run(): Promise<void>;
+}
+
+/** Result of probing the checkout against its upstream (UpdateAPI.status). */
+export interface UpdateStatus {
+  /** Commits the local HEAD is behind its upstream (`HEAD..@{u}`). */
+  behind: number;
+  /** Short SHA of the local HEAD. */
+  current: string;
+  /** Short SHA of the upstream tip (`@{u}`). */
+  latest: string;
+  /** The resolved repo directory the probe ran against. */
+  repoDir: string;
+  /** Convenience flag: `behind > 0`. */
+  available: boolean;
+}
+
 /** Remote runtimes API — Spec 05 §7. */
 export interface RuntimesAPI {
   list(): Promise<RemoteRuntime[]>;

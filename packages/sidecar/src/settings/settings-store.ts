@@ -75,6 +75,8 @@ const updatePatchSchema = z
     permissionDefaults: z.record(z.string().min(1), decisionSchema),
     theme: z.enum(['dark', 'light']),
     showCost: z.boolean(),
+    // Auto-updater checkout. Empty string clears it (back to the app default).
+    repoDir: z.string().max(4096),
   })
   .partial()
   .strict();
@@ -131,6 +133,12 @@ export class SettingsStore implements SettingsAPI {
       next.permissionDefaults = parsed.permissionDefaults;
     if (parsed.theme !== undefined) next.theme = parsed.theme;
     if (parsed.showCost !== undefined) next.showCost = parsed.showCost;
+    if (parsed.repoDir !== undefined) {
+      // Empty string clears the override (fall back to the app default).
+      const trimmed = parsed.repoDir.trim();
+      if (trimmed.length > 0) next.repoDir = trimmed;
+      else delete next.repoDir;
+    }
 
     this.deps.db.transaction(() => this.deps.db.settings.setGlobal(next));
     return { ...next, apiKeyPresent: await this.deps.secrets.has(ANTHROPIC_API_KEY_REF) };

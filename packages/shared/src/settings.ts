@@ -22,6 +22,12 @@ export interface GlobalSettings {
   permissionDefaults: Record<string, Decision>;
   theme: 'dark' | 'light';
   showCost: boolean;
+  /**
+   * Absolute path to the VingsForge git checkout used by the in-app auto-updater
+   * (Spec: UpdateAPI). When empty/undefined the app falls back to its built-in
+   * default checkout path. Must point at a directory containing a `.git`.
+   */
+  repoDir?: string;
 }
 
 /**

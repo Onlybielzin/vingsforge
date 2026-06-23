@@ -28,9 +28,11 @@ import {
 } from '@vingsforge/shared';
 import type {
   ChatsAPI,
+  EngineMetaAPI,
   ProjectsAPI,
   RuntimesAPI,
   SettingsAPI,
+  UpdateAPI,
 } from '@vingsforge/shared';
 import type { EngineChannel, IpcClient, Unsubscribe } from './client.js';
 
@@ -274,6 +276,8 @@ export function createRealIpcClient(opts: RealIpcOptions = {}): RealIpcClient {
     chats: rpcApi<ChatsAPI>(conn, 'chats'),
     runtimes: rpcApi<RuntimesAPI>(conn, 'runtimes'),
     settings: rpcApi<SettingsAPI>(conn, 'settings'),
+    meta: rpcApi<EngineMetaAPI>(conn, 'meta'),
+    update: rpcApi<UpdateAPI>(conn, 'update'),
     close: () => conn.close(),
   };
 }

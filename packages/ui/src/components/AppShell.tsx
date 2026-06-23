@@ -3,7 +3,7 @@
  * right panel (explorer/detail). Reads everything from the store and wires the
  * IPC-backed callbacks; owns no server state of its own.
  */
-import { type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useStore } from '../state/store.js';
 import { Sidebar } from './Sidebar.js';
 import { ChatList } from './ChatList.js';
@@ -11,10 +11,13 @@ import { Conversation } from './Conversation.js';
 import { RightPanel } from './RightPanel.js';
 import { ApiKeyOnboarding } from './ApiKeyOnboarding.js';
 import { SettingsScreen } from './SettingsScreen.js';
+import { UpdateBanner, UpdateModal } from './UpdatePanel.js';
 import { Icon } from './Icon.js';
 
 export function AppShell(): JSX.Element {
   const store = useStore();
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const updateAvailable = store.updateStatus?.available ?? false;
   const activeProject = store.projects.find((p) => p.id === store.activeProjectId) ?? null;
   const activeChat = store.chats.find((c) => c.id === store.activeChatId) ?? null;
   const rootPath = activeProject?.workspace.path ?? null;
@@ -31,6 +34,10 @@ export function AppShell(): JSX.Element {
 
   const gridStyle: CSSProperties = {
     ...grid,
+    // Inside the column shell the banner takes its own height; the grid fills
+    // the rest (min-height:0 lets the inner scroll panes shrink correctly).
+    flex: 1,
+    minHeight: 0,
     gridTemplateColumns:
       store.rightPanel === null
         ? 'minmax(220px, 260px) minmax(0, 1fr) 28px'
@@ -52,9 +59,17 @@ export function AppShell(): JSX.Element {
         settings={store.settings}
         models={store.models}
         onChanged={() => store.refreshSettings()}
+        onCheckUpdate={() => store.refreshUpdateStatus()}
         onClose={() => store.closeSettings()}
       />
     )}
+    {updateOpen && (
+      <UpdateModal ipc={store.ipc} status={store.updateStatus} onClose={() => setUpdateOpen(false)} />
+    )}
+    <div style={shellCol}>
+    {updateAvailable && store.updateStatus ? (
+      <UpdateBanner status={store.updateStatus} onOpen={() => setUpdateOpen(true)} />
+    ) : null}
     <div style={gridStyle}>
       <Sidebar
         projects={store.projects}
@@ -79,6 +94,8 @@ export function AppShell(): JSX.Element {
             agentMode={store.agentMode}
             showThinking={store.settings?.showThinking ?? true}
             showCost={store.settings?.showCost ?? true}
+            slashCommands={store.slashCommands}
+            skills={store.skills}
             onModelChange={store.setModel}
             onRuntimeChange={store.setRuntimeId}
             onAgentModeChange={store.setAgentMode}
@@ -112,6 +129,7 @@ export function AppShell(): JSX.Element {
         onModeChange={store.setRightPanel}
       />
     </div>
+    </div>
     </>
   );
 }
@@ -126,6 +144,12 @@ function EmptyProjects(): JSX.Element {
   );
 }
 
+const shellCol: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  minHeight: 0,
+};
 const grid: CSSProperties = {
   display: 'grid',
   height: '100%',

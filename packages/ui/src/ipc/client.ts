@@ -7,9 +7,11 @@ import type {
   ChatsAPI,
   EngineCommand,
   EngineEvent,
+  EngineMetaAPI,
   ProjectsAPI,
   RuntimesAPI,
   SettingsAPI,
+  UpdateAPI,
 } from '@vingsforge/shared';
 
 /** Unsubscribe handle returned by stream subscriptions. */
@@ -37,5 +39,9 @@ export interface IpcClient {
   chats: ChatsAPI;
   runtimes: RuntimesAPI;
   settings: SettingsAPI;
+  /** Engine capability metadata (CLI slash commands / skills). */
+  meta: EngineMetaAPI;
+  /** In-app git auto-updater (status probe + run; progress via update.* events). */
+  update: UpdateAPI;
   engine: EngineChannel;
 }
