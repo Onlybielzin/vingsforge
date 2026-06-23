@@ -1,0 +1,20 @@
+{
+  "name": "@vingsforge/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "VingsForge desktop shell (Tauri 2 + Node sidecar). Linux-first. Spec 09.",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "typecheck": "echo \"no TS in @vingsforge/desktop (Rust shell)\" && exit 0",
+    "test": "echo \"no tests in @vingsforge/desktop\" && exit 0"
+  },
+  "dependencies": {
+    "@vingsforge/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

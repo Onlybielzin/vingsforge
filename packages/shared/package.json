@@ -1,0 +1,25 @@
+{
+  "name": "@vingsforge/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared types and IPC contracts for VingsForge (Spec 00-09).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"no tests in @vingsforge/shared\" && exit 0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

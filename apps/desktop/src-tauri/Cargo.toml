@@ -1,0 +1,27 @@
+[package]
+name = "vingsforge"
+version = "0.0.0"
+description = "VingsForge desktop shell"
+authors = ["VingsForge"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "vingsforge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Per-launch loopback auth token (see lib.rs + @vingsforge/shared localproto).
+uuid = { version = "1", features = ["v4"] }
+
+[features]
+# This feature is used for production builds where `devUrl` is not used.
+custom-protocol = ["tauri/custom-protocol"]

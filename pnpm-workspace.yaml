@@ -1,0 +1,6 @@
+packages:
+  - packages/shared
+  - packages/persistence
+  - packages/sidecar
+  - packages/ui
+  - apps/desktop

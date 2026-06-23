@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.turbo/
+
+# Tauri / Rust
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+# generated/placeholder sidecar binaries (per target triple)
+apps/desktop/src-tauri/binaries/vingsforge-sidecar-*
+
+# Logs
+*.log
+
+# Local env / secrets — never commit the API key
+.env
+.env.local
+*.local
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

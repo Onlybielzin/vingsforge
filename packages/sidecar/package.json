@@ -1,0 +1,36 @@
+{
+  "name": "@vingsforge/sidecar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "VingsForge engine sidecar (Node). Same binary runs as the local engine and the remote VPS daemon. Spec 03/05/09.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "vingsforge-sidecar": "./dist/host/host.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start:host": "node dist/host/host.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vingsforge/shared": "workspace:*",
+    "@vingsforge/persistence": "workspace:*",
+    "@anthropic-ai/sdk": "^0.68.0",
+    "better-sqlite3": "^12.4.1",
+    "zod": "^4.1.11",
+    "ws": "^8.18.0",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4",
+    "@types/node": "^22.10.5",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/ws": "^8.5.13",
+    "@types/ssh2": "^1.15.1",
+    "@vingsforge/ui": "workspace:*"
+  }
+}

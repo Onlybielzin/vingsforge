@@ -1,0 +1,94 @@
+/* Global baseline (Spec 06 §2). Dark by default; tokens injected by applyTheme. */
+:root {
+  /* Faz o WebKitGTK renderizar controles nativos (select, scrollbar, etc.) no escuro
+     em vez do tema GTK claro — corrige os seletores/dropdowns "brancos". */
+  color-scheme: dark;
+  --vf-bg: #0e1014;
+  --vf-bg-raised: #16191f;
+  --vf-bg-inset: #0a0c0f;
+  --vf-surface: #1b1f27;
+  --vf-border: #272c36;
+  --vf-border-strong: #39404e;
+  --vf-text: #e6e9ef;
+  --vf-text-muted: #9aa3b2;
+  --vf-text-faint: #5f6877;
+  --vf-accent: #6ea8fe;
+  --vf-accent-weak: #1d2c44;
+  --vf-ok: #5cc98a;
+  --vf-warn: #e0b341;
+  --vf-danger: #e06c75;
+  --vf-diff-add: #1b3326;
+  --vf-diff-del: #3a1d20;
+  --vf-font: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --vf-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--vf-bg);
+  color: var(--vf-text);
+  font-family: var(--vf-font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--vf-border-strong);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vf-fade-in {
+  animation: vf-fade-in 160ms ease-out;
+}
+@keyframes vf-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.vf-pulse {
+  animation: vf-pulse 1.2s ease-in-out infinite;
+}
+@keyframes vf-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
