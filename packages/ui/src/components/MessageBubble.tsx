@@ -15,9 +15,11 @@ export interface MessageBubbleProps {
   turn: Turn;
   showThinking: boolean;
   onOpenDetail(detail: DetailContent): void;
+  /** Active model name, forwarded to subagent tool cards. */
+  model?: string;
 }
 
-export function MessageBubble({ turn, showThinking, onOpenDetail }: MessageBubbleProps): JSX.Element {
+export function MessageBubble({ turn, showThinking, onOpenDetail, model }: MessageBubbleProps): JSX.Element {
   const isUser = turn.role === 'user';
   // While streaming with no visible words yet, read as "pensando"; once text is
   // flowing, keep just the dots as a subtle activity cue.
@@ -30,7 +32,14 @@ export function MessageBubble({ turn, showThinking, onOpenDetail }: MessageBubbl
           if (item.kind === 'text') return <Markdown key={i} text={item.text} />;
           if (item.kind === 'thinking')
             return showThinking ? <ReasoningPanel key={i} text={item.text} /> : null;
-          return <ToolCard key={item.card.callId} card={item.card} onOpenDetail={onOpenDetail} />;
+          return (
+            <ToolCard
+              key={item.card.callId}
+              card={item.card}
+              onOpenDetail={onOpenDetail}
+              {...(model ? { model } : {})}
+            />
+          );
         })}
         {turn.streaming ? (
           <div style={{ marginTop: turn.items.length > 0 ? 6 : 0 }}>

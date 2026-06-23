@@ -9,6 +9,8 @@ import type { DetailContent } from './RightPanel.js';
 import { Icon, type IconName } from './Icon.js';
 import { BashTerminal } from './BashTerminal.js';
 import { DiffView } from './DiffView.js';
+import { SubagentCard } from './SubagentCard.js';
+import { isSubagentTool } from './subagentUsage.js';
 
 const STATE_META: Record<ToolState, { label: string; color: string; icon: IconName; spin?: boolean }> = {
   pending: { label: 'pending', color: 'var(--vf-text-faint)', icon: 'spinner' },
@@ -56,10 +58,19 @@ function outputToText(output: unknown): string {
 export function ToolCard({
   card,
   onOpenDetail,
+  model,
 }: {
   card: ToolCardModel;
   onOpenDetail?: (detail: DetailContent) => void;
+  /** Active model name, forwarded to the subagent card's stats line. */
+  model?: string;
 }): JSX.Element {
+  // Subagent (Agent/Task) calls get a dedicated, prettier card instead of the
+  // generic layout; all other tools keep the standard rendering below. The
+  // early return precedes every hook so the hook order stays stable per tool.
+  if (isSubagentTool(card.tool)) {
+    return <SubagentCard card={card} {...(model ? { model } : {})} />;
+  }
   const [open, setOpen] = useState(false);
   const meta = STATE_META[card.state];
   const input = asRecord(card.input);

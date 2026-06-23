@@ -69,6 +69,7 @@ export function Conversation(props: ConversationProps): JSX.Element {
             turn={turn}
             showThinking={props.showThinking}
             onOpenDetail={props.onOpenDetail}
+            model={props.model}
           />
         ))}
 
