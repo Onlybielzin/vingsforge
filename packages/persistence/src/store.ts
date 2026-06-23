@@ -48,10 +48,14 @@ export interface CreateChatInput {
   title?: string;
   modelOverride?: string;
   runtimeOverride?: string;
+  claudeSessionId?: string;
 }
 
 export type UpdateChatPatch = Partial<
-  Pick<Chat, 'title' | 'modelOverride' | 'runtimeOverride' | 'archived'>
+  Pick<
+    Chat,
+    'title' | 'modelOverride' | 'runtimeOverride' | 'archived' | 'claudeSessionId'
+  >
 >;
 
 /** Input to append a message; `seq` is assigned by the store (monotonic per chat). */
@@ -101,6 +105,13 @@ export interface ChatsRepo {
   get(id: string): Chat | undefined;
   create(input: CreateChatInput): Chat;
   update(id: string, patch: UpdateChatPatch): Chat;
+  /**
+   * Persist just the Claude Code CLI `session_id` for a chat (convenience over a
+   * full {@link update} patch). Called when the engine captures a `session_id`,
+   * so `claude --resume` can continue the session after an app restart. A `null`
+   * clears it (e.g. to force a fresh session). No-op if the chat does not exist.
+   */
+  setClaudeSession(id: string, sessionId: string | null): void;
   remove(id: string): void;
 }
 

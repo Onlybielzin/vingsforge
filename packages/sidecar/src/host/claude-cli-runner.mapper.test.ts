@@ -50,7 +50,7 @@ describe('mapStreamLines (pure stream-json → EngineEvent mapper)', () => {
   it('maps a full system/init → assistant(text) → result stream', () => {
     const s = makeSink();
     const lines = ndjson(
-      { type: 'system', subtype: 'init', session_id: 'sess-abc', apiKeySource: 'none' },
+      { type: 'system', subtype: 'init', session_id: '11111111-1111-4111-8111-111111111111', apiKeySource: 'none' },
       {
         type: 'assistant',
         message: {
@@ -92,8 +92,8 @@ describe('mapStreamLines (pure stream-json → EngineEvent mapper)', () => {
     ]);
 
     // session id captured (for --resume) via onSession AND in the aggregate.
-    expect(s.sessions).toEqual(['sess-abc']);
-    expect(out.sessionId).toBe('sess-abc');
+    expect(s.sessions).toEqual(['11111111-1111-4111-8111-111111111111']);
+    expect(out.sessionId).toBe('11111111-1111-4111-8111-111111111111');
 
     // aggregated TurnResult / Usage.
     expect(out.sawResult).toBe(true);
@@ -117,7 +117,7 @@ describe('mapStreamLines (pure stream-json → EngineEvent mapper)', () => {
   it('maps thinking + tool_use (assistant) and tool_result (user) into paired turns', () => {
     const s = makeSink();
     const lines = ndjson(
-      { type: 'system', subtype: 'init', session_id: 's1' },
+      { type: 'system', subtype: 'init', session_id: '22222222-2222-4222-8222-222222222222' },
       {
         type: 'assistant',
         message: {
@@ -311,7 +311,7 @@ describe('mapStreamLines (pure stream-json → EngineEvent mapper)', () => {
       ndjson({
         type: 'system',
         subtype: 'init',
-        session_id: 'sess-meta',
+        session_id: '33333333-3333-4333-8333-333333333333',
         slash_commands: ['code-review', 'init', 'compact', 42, ''],
         skills: ['createmd', 'vault'],
         agents: ['ignored'],
@@ -326,15 +326,31 @@ describe('mapStreamLines (pure stream-json → EngineEvent mapper)', () => {
     };
     expect(s.metas).toEqual([expected]);
     expect(out.meta).toEqual(expected);
-    expect(out.sessionId).toBe('sess-meta');
+    expect(out.sessionId).toBe('33333333-3333-4333-8333-333333333333');
   });
 
   it('does not emit meta for an init event without slash_commands/skills', () => {
     const s = makeSink();
     mapStreamLines(
-      ndjson({ type: 'system', subtype: 'init', session_id: 'sess-x' }),
+      ndjson({ type: 'system', subtype: 'init', session_id: '44444444-4444-4444-8444-444444444444' }),
       s.ctx,
     );
     expect(s.metas).toEqual([]);
+  });
+
+  it('drops a malformed/hostile session_id: never reaches onSession or the aggregate', () => {
+    const s = makeSink();
+    const out = mapStreamLines(
+      ndjson({
+        type: 'system',
+        subtype: 'init',
+        session_id: '--dangerously-skip-permissions',
+      }),
+      s.ctx,
+    );
+
+    // A non-UUID session id is rejected so it can never be passed to --resume.
+    expect(s.sessions).toEqual([]);
+    expect(out.sessionId).toBeUndefined();
   });
 });

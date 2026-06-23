@@ -106,6 +106,7 @@ export const chatSchema = z.object({
   title: z.string(),
   modelOverride: z.string().optional(),
   runtimeOverride: z.string().optional(),
+  claudeSessionId: z.string().optional(),
   createdAt: iso,
   updatedAt: iso,
   archived: z.boolean(),

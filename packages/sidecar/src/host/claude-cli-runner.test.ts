@@ -236,7 +236,7 @@ describe('makeClaudeCliRunner', () => {
     const r1 = runSeq(makeInput(), () => undefined);
     await tick();
     children[0]!.emitLines([
-      { type: 'system', subtype: 'init', session_id: 'SID-1' },
+      { type: 'system', subtype: 'init', session_id: '11111111-1111-4111-8111-111111111111' },
       { type: 'result', subtype: 'success', stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } },
     ]);
     children[0]!.exit(0);
@@ -251,7 +251,7 @@ describe('makeClaudeCliRunner', () => {
     await r2;
 
     expect(seqArgs[0]).not.toContain('--resume');
-    expect(seqArgs[1]).toEqual(expect.arrayContaining(['--resume', 'SID-1']));
+    expect(seqArgs[1]).toContain('--resume=11111111-1111-4111-8111-111111111111');
   });
 
   it('injects ANTHROPIC_API_KEY for apiKey auth and strips it for plan', async () => {

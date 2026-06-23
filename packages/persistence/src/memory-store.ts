@@ -150,6 +150,8 @@ class MemChatsRepo implements ChatsRepo {
     if (input.modelOverride !== undefined) chat.modelOverride = input.modelOverride;
     if (input.runtimeOverride !== undefined)
       chat.runtimeOverride = input.runtimeOverride;
+    if (input.claudeSessionId !== undefined)
+      chat.claudeSessionId = input.claudeSessionId;
     this.s.chats.set(chat.id, clone(chat));
     this.s.messages.set(chat.id, []);
     return clone(chat);
@@ -161,6 +163,17 @@ class MemChatsRepo implements ChatsRepo {
     const next: Chat = { ...existing, ...clone(patch), updatedAt: nowIso() };
     this.s.chats.set(id, next);
     return clone(next);
+  }
+
+  setClaudeSession(id: string, sessionId: string | null): void {
+    const existing = this.s.chats.get(id);
+    if (!existing) return;
+    // Mirror the SQLite repo: update only the session field, leaving updatedAt
+    // untouched so capturing a CLI session id doesn't reorder the chat list.
+    const next: Chat = { ...existing };
+    if (sessionId === null) delete next.claudeSessionId;
+    else next.claudeSessionId = sessionId;
+    this.s.chats.set(id, next);
   }
 
   remove(id: string): void {

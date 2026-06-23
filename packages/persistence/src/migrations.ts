@@ -6,7 +6,7 @@
 import type { Database } from 'better-sqlite3';
 
 /** Latest schema version shipped by this build. */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export interface Migration {
   version: number;
@@ -113,8 +113,29 @@ const v3: Migration = {
   },
 };
 
+/**
+ * v4 — persist the Claude Code CLI `session_id` per chat so `claude --resume`
+ * can continue the same CLI session across app restarts. The id otherwise lived
+ * only in an in-memory Map in the runner and was lost on restart, so reopening an
+ * old chat started a fresh CLI session (losing context). Nullable: legacy rows
+ * predate the column and resolve to `undefined` (first turn re-establishes it).
+ */
+const v4: Migration = {
+  version: 4,
+  up(db) {
+    const columns = db
+      .prepare<[], { name: string }>(`PRAGMA table_info(chats)`)
+      .all();
+    const tableExists = columns.length > 0;
+    const hasColumn = columns.some((c) => c.name === 'claude_session_id');
+    if (tableExists && !hasColumn) {
+      db.exec(`ALTER TABLE chats ADD COLUMN claude_session_id TEXT;`);
+    }
+  },
+};
+
 /** All migrations, ascending by version. */
-export const MIGRATIONS: readonly Migration[] = [v1, v2, v3];
+export const MIGRATIONS: readonly Migration[] = [v1, v2, v3, v4];
 
 /** Read the persisted schema version (0 if never initialised). */
 export function readSchemaVersion(db: Database): number {

@@ -77,6 +77,7 @@ interface ChatRow {
   title: string;
   model_override: string | null;
   runtime_override: string | null;
+  claude_session_id: string | null;
   archived: number;
   created_at: string;
   updated_at: string;
@@ -137,6 +138,10 @@ function rowToChat(row: ChatRow): Chat {
   };
   if (row.model_override !== null) chat.modelOverride = row.model_override;
   if (row.runtime_override !== null) chat.runtimeOverride = row.runtime_override;
+  // `claude_session_id` is added by migration v4; guard with `!= null` so a
+  // database opened mid-upgrade (or a SELECT before the column exists) yields
+  // `undefined` rather than throwing.
+  if (row.claude_session_id != null) chat.claudeSessionId = row.claude_session_id;
   return chat;
 }
 
@@ -303,11 +308,13 @@ class SqliteChatsRepo implements ChatsRepo {
     if (input.modelOverride !== undefined) chat.modelOverride = input.modelOverride;
     if (input.runtimeOverride !== undefined)
       chat.runtimeOverride = input.runtimeOverride;
+    if (input.claudeSessionId !== undefined)
+      chat.claudeSessionId = input.claudeSessionId;
     this.db
       .prepare(
         `INSERT INTO chats
-          (id, project_id, title, model_override, runtime_override, archived, created_at, updated_at)
-         VALUES (@id, @project_id, @title, @model_override, @runtime_override, @archived, @created_at, @updated_at)`,
+          (id, project_id, title, model_override, runtime_override, claude_session_id, archived, created_at, updated_at)
+         VALUES (@id, @project_id, @title, @model_override, @runtime_override, @claude_session_id, @archived, @created_at, @updated_at)`,
       )
       .run({
         id: chat.id,
@@ -315,6 +322,7 @@ class SqliteChatsRepo implements ChatsRepo {
         title: chat.title,
         model_override: chat.modelOverride ?? null,
         runtime_override: chat.runtimeOverride ?? null,
+        claude_session_id: chat.claudeSessionId ?? null,
         archived: 0,
         created_at: chat.createdAt,
         updated_at: chat.updatedAt,
@@ -332,6 +340,7 @@ class SqliteChatsRepo implements ChatsRepo {
            title = @title,
            model_override = @model_override,
            runtime_override = @runtime_override,
+           claude_session_id = @claude_session_id,
            archived = @archived,
            updated_at = @updated_at
          WHERE id = @id`,
@@ -341,10 +350,20 @@ class SqliteChatsRepo implements ChatsRepo {
         title: next.title,
         model_override: next.modelOverride ?? null,
         runtime_override: next.runtimeOverride ?? null,
+        claude_session_id: next.claudeSessionId ?? null,
         archived: next.archived ? 1 : 0,
         updated_at: next.updatedAt,
       });
     return next;
+  }
+
+  setClaudeSession(id: string, sessionId: string | null): void {
+    // Touch only the session column; do NOT bump updated_at — capturing a CLI
+    // session id is an internal continuation detail, not user activity, so it
+    // must not reorder the chat list. No-op when the chat is gone.
+    this.db
+      .prepare(`UPDATE chats SET claude_session_id = ? WHERE id = ?`)
+      .run(sessionId, id);
   }
 
   remove(id: string): void {

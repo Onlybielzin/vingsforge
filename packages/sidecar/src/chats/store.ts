@@ -81,12 +81,28 @@ export interface EngineTurnInput {
   policy?: PermissionPolicy;
   /** Quick modes (read-only / auto-approve) for the turn (Spec 04 §3.2). */
   modes?: PermissionModes;
+  /**
+   * Persisted Claude Code CLI `session_id` for this chat, if any (Spec: resume
+   * across restarts). The CLI runner uses it to pass `claude --resume <id>` so an
+   * old chat continues its prior CLI session after the app restarts, instead of
+   * starting a fresh one and losing context. Absent on a chat's first CLI turn.
+   * This is the SOURCE OF TRUTH for resume; the runner's in-memory Map is only a
+   * fallback cache for turns within a single process run.
+   */
+  resumeSessionId?: string;
   /** Aborts the turn when {@link ChatStore.interrupt} fires. */
   controller: AbortController;
   /** Persist a completed assistant turn (called by the engine). */
   persistAssistant(chatId: string, message: ChatMessage): void;
   /** Persist the user turn carrying batched tool_results (called by the engine). */
   persistToolResults(chatId: string, message: ChatMessage): void;
+  /**
+   * Persist the Claude Code CLI `session_id` captured by the engine for this chat
+   * (called by the CLI runner when `system/init` advertises a session). Durable so
+   * `claude --resume` works after an app restart. No-op for engines that don't run
+   * the CLI (SDK engine never calls it).
+   */
+  persistClaudeSession?(chatId: string, sessionId: string): void;
 }
 
 /**
@@ -310,7 +326,16 @@ export class ChatStore implements ChatsAPI {
         controller,
         persistAssistant: (id, message) => this.persistTurn(id, message),
         persistToolResults: (id, message) => this.persistTurn(id, message),
+        // Persist any CLI session_id the engine captures, so `--resume` survives
+        // an app restart. Writing only the session column (no updatedAt bump)
+        // keeps the chat list ordering driven by real messages.
+        persistClaudeSession: (id, sessionId) =>
+          this.deps.db.chats.setClaudeSession(id, sessionId),
       };
+      // Pass the persisted CLI session id (read fresh from the chat row) so the
+      // runner resumes the right session even on the FIRST turn after a restart.
+      const resumeSessionId = this.deps.db.chats.get(chatId)?.claudeSessionId;
+      if (resumeSessionId !== undefined) input.resumeSessionId = resumeSessionId;
       if (context.model !== undefined) input.model = context.model;
       if (context.runtimeId !== undefined) input.runtimeId = context.runtimeId;
       if (context.effort !== undefined) input.effort = context.effort;

@@ -49,6 +49,23 @@ import type { EngineTurnInput, TurnResult } from '../chats/store.js';
 export const CLAUDE_BIN_ENV = 'VINGSFORGE_CLAUDE_BIN';
 
 /**
+ * The CLI `session_id` is a UUID. We validate captured ids against this and
+ * REFUSE to pass anything else to `--resume`. This closes an argument-injection
+ * surface: a value beginning with `-` (e.g. `--dangerously-skip-permissions`)
+ * or containing `/`, whitespace, or NUL could be reinterpreted by the child
+ * `claude` arg parser as a separate flag/path. The id's provenance is only
+ * semi-trusted (CLI stdout JSON today, but also the persisted SQLite row, a
+ * tamper/corruption surface), so we validate at BOTH capture and use.
+ */
+const SESSION_ID_RE =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/** True only for a syntactically valid CLI session id (UUID, no flag/path injection). */
+function isValidSessionId(value: unknown): value is string {
+  return typeof value === 'string' && SESSION_ID_RE.test(value);
+}
+
+/**
  * How the child `claude` process authenticates:
  *  - `'plan'`   — use the machine's logged-in subscription. ANTHROPIC_API_KEY /
  *                 ANTHROPIC_AUTH_TOKEN are stripped from the child env so the CLI
@@ -152,7 +169,11 @@ export function makeClaudeCliRunner(
 
     const model: ModelId = input.model ?? DEFAULT_MODEL;
     const permissionMode = mapPermissionMode(input.modes);
-    const resumeId = sessions.get(chatId);
+    // The persisted session id from the chat (input.resumeSessionId) is the
+    // source of truth — it survives app restarts (the in-memory Map does not).
+    // Fall back to the Map only for turns within this same process run where the
+    // chat hasn't (yet) had its id persisted.
+    const resumeId = input.resumeSessionId ?? sessions.get(chatId);
 
     const args = [
       '-p',
@@ -168,8 +189,15 @@ export function makeClaudeCliRunner(
       '--add-dir',
       root,
     ];
+    // Defensive re-check: a tampered/legacy DB row (or stale Map entry) must
+    // never become an attacker-chosen flag. Pass `--resume=<id>` as a single
+    // token so the value can never be parsed as a standalone argument.
     if (resumeId !== undefined) {
-      args.push('--resume', resumeId);
+      if (isValidSessionId(resumeId)) {
+        args.push(`--resume=${resumeId}`);
+      } else {
+        log(`ignoring malformed resume session id (not a UUID); starting fresh`);
+      }
     }
 
     const env = childEnv(auth);
@@ -178,7 +206,7 @@ export function makeClaudeCliRunner(
     // `env.ANTHROPIC_API_KEY`, which we do not stringify).
     log(
       `spawn claude model=${model} mode=${permissionMode} auth=${auth.authMode}` +
-        `${resumeId !== undefined ? ' resume' : ''} cwd=${root}`,
+        `${isValidSessionId(resumeId) ? ' resume' : ''} cwd=${root}`,
     );
 
     let child: ChildProcessWithoutNullStreams;
@@ -204,7 +232,12 @@ export function makeClaudeCliRunner(
       persistAssistant: input.persistAssistant,
       persistToolResults: input.persistToolResults,
       model,
-      onSession: (sid) => sessions.set(chatId, sid),
+      onSession: (sid) => {
+        // Cache in-process (fast path for subsequent turns this run) AND persist
+        // to the chat row so `--resume` keeps working after the app restarts.
+        sessions.set(chatId, sid);
+        input.persistClaudeSession?.(chatId, sid);
+      },
       onMeta: deps.onMeta,
       log,
     });
@@ -448,7 +481,9 @@ function handleStreamEvent(event: ClaudeStreamEvent, ctx: HandleCtx): HandleOutc
 function handleSystem(event: ClaudeStreamEvent): HandleOutcome {
   if (event.subtype !== 'init') return {};
   const out: HandleOutcome = {};
-  if (typeof event.session_id === 'string') out.sessionId = event.session_id;
+  // Only accept a syntactically valid UUID session id; a malformed/hostile value
+  // must never be persisted (it would later flow back into `--resume`).
+  if (isValidSessionId(event.session_id)) out.sessionId = event.session_id;
   // The init event advertises the CLI's slash commands + skills (and agents).
   // Capture the string arrays defensively — fields may be absent on older CLIs.
   const slashCommands = stringArray(event.slash_commands);

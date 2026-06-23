@@ -9,6 +9,13 @@ export interface Chat {
   title: string;
   modelOverride?: ModelId;
   runtimeOverride?: string;
+  /**
+   * Claude Code CLI `session_id` captured from the engine, persisted per chat so
+   * `claude --resume <id>` can continue the same CLI session across app restarts
+   * (the CLI stores sessions under ~/.claude/projects/...). Absent on chats that
+   * have never run a turn on the CLI engine, or on databases predating the column.
+   */
+  claudeSessionId?: string;
   createdAt: IsoDateString;
   updatedAt: IsoDateString;
   archived: boolean;
