@@ -24,6 +24,21 @@ export function AppShell(): JSX.Element {
   const activeChat = store.chats.find((c) => c.id === store.activeChatId) ?? null;
   const rootPath = activeProject?.workspace.path ?? null;
 
+  // Open a chat from the Sidebar tree. If the chat belongs to a project other
+  // than the active one, switch to that project first so its chat list is loaded
+  // before we open the chat (selectChat persists the last-chat under the active
+  // project). Within the active project we just open it directly.
+  const selectNestedChat = async (chatId: string): Promise<void> => {
+    const owner = Object.entries(store.chatsByProject).find(([, list]) =>
+      list.some((c) => c.id === chatId),
+    )?.[0];
+    if (owner && owner !== store.activeProjectId) await store.selectProject(owner);
+    // Pass the owning project explicitly: right after selectProject the store's
+    // activeProjectId is still the previous one (no re-render yet), so without
+    // this the last-chat pointer would be persisted under the wrong project.
+    await store.selectChat(chatId, owner);
+  };
+
   // Spec 07 §3: gate the app on auth onboarding. Only once settings have loaded
   // (so we don't flash the modal during the initial fetch). Two cases block:
   //   - apiKey mode selected but no key is stored yet;
@@ -89,7 +104,13 @@ export function AppShell(): JSX.Element {
         projects={store.projects}
         runtimes={store.runtimes}
         activeProjectId={store.activeProjectId}
+        activeChatId={store.activeChatId}
+        streaming={store.conversation.streaming}
+        chatsByProject={store.chatsByProject}
+        expandedProjects={store.expandedProjects}
         onSelectProject={(id) => void store.selectProject(id)}
+        onToggleProjectExpanded={(id) => void store.toggleProjectExpanded(id)}
+        onSelectChat={(id) => void selectNestedChat(id)}
         onNewProject={() => void store.newProject()}
         onOpenSettings={() => store.openSettings()}
       />
@@ -128,6 +149,8 @@ export function AppShell(): JSX.Element {
           <ChatList
             projectName={activeProject?.name ?? null}
             chats={store.chats}
+            activeChatId={store.activeChatId}
+            streaming={store.conversation.streaming}
             onSelectChat={(id) => void store.selectChat(id)}
             onNewChat={() => void store.newChat()}
             onContinueClaudeSession={() => setSessionsOpen(true)}

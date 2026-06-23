@@ -5,10 +5,16 @@
 import type { CSSProperties } from 'react';
 import type { ChatSummary } from '@vingsforge/shared';
 import { Icon } from './Icon.js';
+import { ChatStatusDot } from './ChatStatusDot.js';
+import { chatStatus } from './chatStatus.js';
 
 export interface ChatListProps {
   projectName: string | null;
   chats: ChatSummary[];
+  /** Currently open chat, for the per-row status indicator. */
+  activeChatId: string | null;
+  /** Whether the active conversation is streaming a turn (drives the dot). */
+  streaming: boolean;
   onSelectChat(id: string): void;
   onNewChat(): void;
   /** Opens the "Continuar sessão do Claude" modal (import a terminal session). */
@@ -18,6 +24,8 @@ export interface ChatListProps {
 export function ChatList({
   projectName,
   chats,
+  activeChatId,
+  streaming,
   onSelectChat,
   onNewChat,
   onContinueClaudeSession,
@@ -53,6 +61,9 @@ export function ChatList({
           {visible.map((c) => (
             <li key={c.id}>
               <button style={row} onClick={() => onSelectChat(c.id)} className="vf-fade-in">
+                <span style={{ marginTop: 5 }}>
+                  <ChatStatusDot status={chatStatus(c.id, activeChatId, streaming)} />
+                </span>
                 <Icon name="chat" size={16} style={{ color: 'var(--vf-text-muted)', marginTop: 2 }} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={rowTitle}>{c.title}</span>

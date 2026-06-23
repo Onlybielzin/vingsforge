@@ -26,9 +26,30 @@ function str(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** Pull the readable text out of a single tool_result content block. */
+function blockText(block: unknown): string {
+  if (typeof block === 'string') return block;
+  if (block && typeof block === 'object') {
+    const rec = block as Record<string, unknown>;
+    if (typeof rec.text === 'string') return rec.text;
+    if (typeof rec.content === 'string') return rec.content;
+    if (rec.type === 'image') return '[imagem]';
+  }
+  return '';
+}
+
 function outputToText(output: unknown): string {
   if (output == null) return '';
   if (typeof output === 'string') return output;
+  // Claude tool_result content is usually an array of blocks
+  // ([{type:'text',text:'...'}, ...]). Extract the text so we render readable
+  // output (with real newlines) instead of a raw JSON dump with escaped "\n".
+  if (Array.isArray(output)) {
+    const text = output.map(blockText).filter(Boolean).join('\n');
+    if (text) return text;
+  }
+  const single = blockText(output);
+  if (single) return single;
   return JSON.stringify(output, null, 2);
 }
 

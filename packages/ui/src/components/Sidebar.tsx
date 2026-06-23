@@ -1,10 +1,19 @@
 /**
  * Left sidebar (Spec 06 §3): projects grouped by runtime with local/VPS badges
  * and status, a "new project" action, and Settings access.
+ *
+ * Projects are expandable (chevron-right collapsed / chevron-down expanded):
+ * expanding reveals that project's chats nested below it (lazy-loaded into the
+ * store's chatsByProject cache). Clicking the project NAME selects it (main
+ * panel shows its ChatList); clicking the chevron only toggles the sub-tree.
+ * Clicking a nested chat opens it. Each chat row carries a status dot
+ * (green pulsing for the active+streaming chat, neutral otherwise).
  */
 import type { CSSProperties } from 'react';
-import type { Project, RemoteRuntime, RemoteRuntimeStatus } from '@vingsforge/shared';
+import type { ChatSummary, Project, RemoteRuntime, RemoteRuntimeStatus } from '@vingsforge/shared';
 import { Icon } from './Icon.js';
+import { ChatStatusDot } from './ChatStatusDot.js';
+import { chatStatus } from './chatStatus.js';
 
 const STATUS_COLOR: Record<RemoteRuntimeStatus, string> = {
   online: 'var(--vf-ok)',
@@ -18,7 +27,19 @@ export interface SidebarProps {
   projects: Project[];
   runtimes: RemoteRuntime[];
   activeProjectId: string | null;
+  /** Currently open chat, for highlighting + status in the tree. */
+  activeChatId: string | null;
+  /** Whether the active conversation is streaming a turn (drives the dot). */
+  streaming: boolean;
+  /** Per-project chat lists for the expandable tree (store.chatsByProject). */
+  chatsByProject: Record<string, ChatSummary[]>;
+  /** Ids of projects whose chat sub-tree is expanded. */
+  expandedProjects: string[];
   onSelectProject(id: string): void;
+  /** Toggle a project's expanded state (lazily loads its chats). */
+  onToggleProjectExpanded(id: string): void;
+  /** Open a nested chat (selecting its project first if needed). */
+  onSelectChat(id: string): void;
   onNewProject(): void;
   onOpenSettings(): void;
 }
@@ -27,7 +48,13 @@ export function Sidebar({
   projects,
   runtimes,
   activeProjectId,
+  activeChatId,
+  streaming,
+  chatsByProject,
+  expandedProjects,
   onSelectProject,
+  onToggleProjectExpanded,
+  onSelectChat,
   onNewProject,
   onOpenSettings,
 }: SidebarProps): JSX.Element {
@@ -57,16 +84,65 @@ export function Sidebar({
             ) : (
               g.projects.map((p) => {
                 const active = p.id === activeProjectId;
+                const expanded = expandedProjects.includes(p.id);
+                const chats = (chatsByProject[p.id] ?? []).filter((c) => !c.archived);
                 return (
-                  <button
-                    key={p.id}
-                    onClick={() => onSelectProject(p.id)}
-                    style={{ ...projectRow, ...(active ? projectRowActive : null) }}
-                  >
-                    <Icon name="folder" size={15} style={{ color: active ? 'var(--vf-accent)' : 'var(--vf-text-muted)' }} />
-                    <span style={projectName}>{p.name}</span>
-                    <span style={badge}>{g.kind === 'local' ? 'local' : 'vps'}</span>
-                  </button>
+                  <div key={p.id}>
+                    <div style={{ ...projectRow, ...(active ? projectRowActive : null) }}>
+                      <button
+                        type="button"
+                        onClick={() => onToggleProjectExpanded(p.id)}
+                        style={chevronBtn}
+                        title={expanded ? 'Collapse' : 'Expand'}
+                        aria-label={expanded ? 'Collapse project' : 'Expand project'}
+                        aria-expanded={expanded}
+                      >
+                        <Icon
+                          name={expanded ? 'chevron-down' : 'chevron-right'}
+                          size={14}
+                          style={{ color: 'var(--vf-text-faint)' }}
+                        />
+                      </button>
+                      <button type="button" onClick={() => onSelectProject(p.id)} style={projectNameBtn}>
+                        <Icon
+                          name="folder"
+                          size={15}
+                          style={{ color: active ? 'var(--vf-accent)' : 'var(--vf-text-muted)' }}
+                        />
+                        <span style={projectName}>{p.name}</span>
+                      </button>
+                      <span style={badge}>{g.kind === 'local' ? 'local' : 'vps'}</span>
+                    </div>
+
+                    {expanded ? (
+                      chats.length === 0 ? (
+                        <p style={chatEmptyHint}>No chats</p>
+                      ) : (
+                        <ul style={chatTree}>
+                          {chats.map((c) => {
+                            const chatActive = c.id === activeChatId;
+                            const status = chatStatus(c.id, activeChatId, streaming);
+                            return (
+                              <li key={c.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectChat(c.id)}
+                                  style={{ ...chatRow, ...(chatActive ? chatRowActive : null) }}
+                                  title={c.title}
+                                >
+                                  <ChatStatusDot status={status} />
+                                  <span style={chatName}>{c.title}</span>
+                                  {c.lastMessagePreview ? (
+                                    <span style={chatPreview}>{c.lastMessagePreview}</span>
+                                  ) : null}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )
+                    ) : null}
+                  </div>
                 );
               })
             )}
@@ -149,16 +225,38 @@ const emptyHint: CSSProperties = { margin: '2px 10px', fontSize: 12, color: 'var
 const projectRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
+  gap: 4,
   width: '100%',
-  padding: '7px 8px',
-  border: 'none',
+  padding: '4px 8px 4px 2px',
   borderRadius: 7,
   background: 'transparent',
   color: 'var(--vf-text)',
-  textAlign: 'left',
 };
 const projectRowActive: CSSProperties = { background: 'var(--vf-accent-weak)' };
+const chevronBtn: CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  padding: 4,
+  display: 'grid',
+  placeItems: 'center',
+  color: 'var(--vf-text-faint)',
+  cursor: 'pointer',
+  borderRadius: 5,
+  flexShrink: 0,
+};
+const projectNameBtn: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flex: 1,
+  minWidth: 0,
+  padding: '3px 0',
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--vf-text)',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
 const projectName: CSSProperties = { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 const badge: CSSProperties = {
   fontSize: 10,
@@ -166,6 +264,48 @@ const badge: CSSProperties = {
   border: '1px solid var(--vf-border)',
   borderRadius: 4,
   padding: '0 5px',
+  flexShrink: 0,
+};
+const chatTree: CSSProperties = {
+  listStyle: 'none',
+  margin: '2px 0 4px',
+  padding: '0 0 0 22px',
+};
+const chatEmptyHint: CSSProperties = {
+  margin: '2px 0 4px 24px',
+  fontSize: 11,
+  color: 'var(--vf-text-faint)',
+};
+const chatRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 7,
+  width: '100%',
+  padding: '5px 8px',
+  border: 'none',
+  borderRadius: 6,
+  background: 'transparent',
+  color: 'var(--vf-text-muted)',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+const chatRowActive: CSSProperties = { background: 'var(--vf-accent-weak)', color: 'var(--vf-text)' };
+const chatName: CSSProperties = {
+  flexShrink: 0,
+  maxWidth: '11ch',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 12.5,
+};
+const chatPreview: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 11,
+  color: 'var(--vf-text-faint)',
 };
 const foot: CSSProperties = { borderTop: '1px solid var(--vf-border)', padding: 8 };
 const settingsBtn: CSSProperties = {

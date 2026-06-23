@@ -33,6 +33,7 @@ import {
   reduceEvent,
   type ConversationState,
 } from './conversation.js';
+import { cacheChats, shouldLoadChats, toggleExpanded, willExpand } from './projectTree.js';
 
 export interface AppStore {
   ipc: IpcClient;
@@ -43,6 +44,13 @@ export interface AppStore {
   activeProjectId: string | null;
   activeChatId: string | null;
   chats: ChatSummary[];
+  /**
+   * Per-project chat lists cached for the expandable Sidebar tree. Populated
+   * lazily on first expand (and kept fresh on doSelectProject/newChat/import).
+   */
+  chatsByProject: Record<string, ChatSummary[]>;
+  /** Ids of projects whose chat sub-tree is expanded in the Sidebar. */
+  expandedProjects: string[];
   conversation: ConversationState;
   /** Effective model for the input bar; may be overridden per chat. */
   model: ModelId;
@@ -65,7 +73,13 @@ export interface AppStore {
   /** Re-probes the checkout for available updates (Objetivo 2). */
   refreshUpdateStatus(): Promise<UpdateStatus | null>;
   selectProject(id: string): Promise<void>;
-  selectChat(id: string): Promise<void>;
+  selectChat(id: string, projectId?: string): Promise<void>;
+  /**
+   * Toggle a project's expanded state in the Sidebar tree. On expand, lazily
+   * loads that project's chats via ipc.chats.list and caches them in
+   * chatsByProject (only fetches when the cache is still empty for that id).
+   */
+  toggleProjectExpanded(id: string): Promise<void>;
   /** Closes the open chat and returns to the project's chat list. */
   closeChat(): void;
   newProject(): Promise<void>;
@@ -104,6 +118,8 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [chatsByProject, setChatsByProject] = useState<Record<string, ChatSummary[]>>({});
+  const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
   const [conversation, setConversation] = useState<ConversationState>(emptyConversation());
   const [model, setModel] = useState<ModelId>('claude-opus-4-8');
   const [runtimeId, setRuntimeId] = useState<string>('local');
@@ -231,12 +247,13 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       const proj = all.find((p) => p.id === id) ?? project;
       setActiveProjectId(id);
       setChats(list);
+      setChatsByProject((prev) => ({ ...prev, [id]: list }));
       setRuntimeId(proj.runtimeId);
       if (proj.defaultModel) setModel(proj.defaultModel);
       localStorage.setItem(LAST_PROJECT_KEY, id);
       const lastChat = localStorage.getItem(`${LAST_CHAT_KEY}.${id}`);
       const targetChat = list.find((c) => c.id === lastChat) ?? null;
-      if (targetChat) await doSelectChat(targetChat.id);
+      if (targetChat) await doSelectChat(targetChat.id, id);
       else {
         setActiveChatId(null);
         setConversation(emptyConversation());
@@ -247,16 +264,47 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
   );
 
   const doSelectChat = useCallback(
-    async (id: string) => {
+    // `projectId` lets callers persist the last-chat pointer under the chat's
+    // owning project. Without it we fall back to the active project, but that
+    // closure value is stale right after a selectProject() call (the state
+    // update hasn't re-rendered yet), so nested-chat selection must pass it.
+    async (id: string, projectId?: string) => {
       const history = await ipc.chats.history(id);
       activeChatRef.current = id;
       setActiveChatId(id);
       setConversation(hydrateHistory(id, history));
-      if (activeProjectId) localStorage.setItem(`${LAST_CHAT_KEY}.${activeProjectId}`, id);
+      const owner = projectId ?? activeProjectId;
+      if (owner) localStorage.setItem(`${LAST_CHAT_KEY}.${owner}`, id);
       // Load the CLI's advertised commands/skills for the input popup (Objetivo 1).
       void refreshMeta();
     },
     [ipc, activeProjectId, refreshMeta],
+  );
+
+  const toggleProjectExpanded = useCallback(
+    async (id: string) => {
+      let expanding = false;
+      setExpandedProjects((prev) => {
+        expanding = willExpand(prev, id);
+        return toggleExpanded(prev, id);
+      });
+      if (!expanding) return;
+      // Lazy load: only hit the IPC if we haven't cached this project's chats yet.
+      // Best-effort — a failed list just leaves the sub-tree empty until retried.
+      setChatsByProject((prev) => {
+        if (!shouldLoadChats(prev, id, true)) return prev;
+        void (async () => {
+          try {
+            const list = await ipc.chats.list(id);
+            setChatsByProject((cur) => cacheChats(cur, id, list));
+          } catch {
+            // Leave uncached so a later expand retries.
+          }
+        })();
+        return prev;
+      });
+    },
+    [ipc],
   );
 
   const newProject = useCallback(async () => {
@@ -290,6 +338,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
     const chat = await ipc.chats.create(activeProjectId, { model, runtimeId });
     const list = await ipc.chats.list(activeProjectId);
     setChats(list);
+    setChatsByProject((prev) => ({ ...prev, [activeProjectId]: list }));
     await doSelectChat(chat.id);
   }, [ipc, activeProjectId, model, runtimeId, doSelectChat]);
 
@@ -311,6 +360,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       const chat = await ipc.chats.importSession(activeProjectId, sessionId);
       const list = await ipc.chats.list(activeProjectId);
       setChats(list);
+      setChatsByProject((prev) => ({ ...prev, [activeProjectId]: list }));
       await doSelectChat(chat.id);
       return chat.id;
     },
@@ -369,6 +419,8 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       activeProjectId,
       activeChatId,
       chats,
+      chatsByProject,
+      expandedProjects,
       conversation,
       model,
       runtimeId,
@@ -383,6 +435,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       refreshUpdateStatus,
       selectProject: (id) => doSelectProject(id),
       selectChat: doSelectChat,
+      toggleProjectExpanded,
       closeChat,
       newProject,
       newChat,
@@ -407,6 +460,8 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       activeProjectId,
       activeChatId,
       chats,
+      chatsByProject,
+      expandedProjects,
       conversation,
       model,
       runtimeId,
@@ -424,6 +479,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
       closeSettings,
       doSelectProject,
       doSelectChat,
+      toggleProjectExpanded,
       closeChat,
       newProject,
       newChat,
