@@ -3,11 +3,14 @@
  * tool/diff detail view. Collapsible. Explorer entries come from the runtimes
  * fsList IPC; the detail view reuses DiffView.
  */
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { DirEntry, Worktree } from '@vingsforge/shared';
 import type { IpcClient } from '../ipc/client.js';
+import type { ConversationState } from '../state/conversation.js';
 import { Icon, type IconName } from './Icon.js';
 import { DiffView } from './DiffView.js';
+import { AgentsPanel } from './AgentsPanel.js';
+import { countRunning, extractSubagents } from './agentsPanel.js';
 
 export interface DetailContent {
   title: string;
@@ -15,7 +18,7 @@ export interface DetailContent {
   modified: string;
 }
 
-export type RightPanelMode = 'explorer' | 'detail' | 'worktrees' | null;
+export type RightPanelMode = 'explorer' | 'detail' | 'worktrees' | 'agents' | null;
 
 export interface RightPanelProps {
   ipc: IpcClient;
@@ -24,6 +27,10 @@ export interface RightPanelProps {
   activeProjectId: string | null;
   mode: RightPanelMode;
   detail: DetailContent | null;
+  /** Live conversation, used to derive the subagents shown in the Agentes tab. */
+  conversation: ConversationState;
+  /** Active model name, shown in finished agents' stats line. */
+  model?: string;
   onModeChange(mode: RightPanelMode): void;
 }
 
@@ -34,8 +41,16 @@ export function RightPanel({
   activeProjectId,
   mode,
   detail,
+  conversation,
+  model,
   onModeChange,
 }: RightPanelProps): JSX.Element | null {
+  const agents = useMemo(() => extractSubagents(conversation), [conversation]);
+  const runningAgents = countRunning(agents);
+  // Badge prefers the running count (an at-a-glance "how many are working"),
+  // falling back to the total when none are running but some exist.
+  const agentsBadge = runningAgents > 0 ? runningAgents : agents.length;
+
   if (mode === null) {
     return (
       <button style={collapsedHandle} onClick={() => onModeChange('explorer')} title="Show panel" aria-label="Show panel">
@@ -49,6 +64,13 @@ export function RightPanel({
       <header style={head}>
         <Tab active={mode === 'explorer'} icon="folder" label="Explorer" onClick={() => onModeChange('explorer')} />
         <Tab active={mode === 'worktrees'} icon="folder" label="Worktrees" onClick={() => onModeChange('worktrees')} />
+        <Tab
+          active={mode === 'agents'}
+          icon="chat"
+          label="Agentes"
+          onClick={() => onModeChange('agents')}
+          {...(agentsBadge > 0 ? { badge: agentsBadge } : {})}
+        />
         <Tab active={mode === 'detail'} icon="file" label="Detail" onClick={() => onModeChange('detail')} disabled={!detail} />
         <button style={collapseBtn} onClick={() => onModeChange(null)} title="Collapse" aria-label="Collapse panel">
           <Icon name="cross" size={14} />
@@ -60,6 +82,8 @@ export function RightPanel({
           <Explorer ipc={ipc} runtimeId={runtimeId} rootPath={rootPath} />
         ) : mode === 'worktrees' ? (
           <WorktreesPanel ipc={ipc} activeProjectId={activeProjectId} />
+        ) : mode === 'agents' ? (
+          <AgentsPanel agents={agents} {...(model ? { model } : {})} />
         ) : detail ? (
           <div>
             <p style={detailTitle}>{detail.title}</p>
@@ -224,17 +248,21 @@ function Tab({
   label,
   onClick,
   disabled,
+  badge,
 }: {
   active: boolean;
   icon: IconName;
   label: string;
   onClick(): void;
   disabled?: boolean;
+  /** Optional count shown as a pill on the tab (e.g. subagents running). */
+  badge?: number;
 }): JSX.Element {
   return (
     <button onClick={onClick} disabled={disabled} style={{ ...tab, ...(active ? tabActive : null) }}>
       <Icon name={icon} size={14} />
       {label}
+      {badge != null && badge > 0 ? <span style={tabBadge}>{badge}</span> : null}
     </button>
   );
 }
@@ -265,6 +293,21 @@ const tab: CSSProperties = {
   fontSize: 12.5,
 };
 const tabActive: CSSProperties = { background: 'var(--vf-surface)', color: 'var(--vf-text)', borderColor: 'var(--vf-border)' };
+const tabBadge: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 16,
+  height: 16,
+  padding: '0 4px',
+  borderRadius: 999,
+  fontSize: 10,
+  fontWeight: 700,
+  lineHeight: 1,
+  background: 'var(--vf-accent-weak)',
+  border: '1px solid color-mix(in srgb, var(--vf-accent) 35%, transparent)',
+  color: 'var(--vf-accent)',
+};
 const collapseBtn: CSSProperties = {
   marginLeft: 'auto',
   background: 'transparent',

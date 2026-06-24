@@ -56,7 +56,7 @@ export interface AppStore {
   model: ModelId;
   runtimeId: string;
   agentMode: AgentMode;
-  rightPanel: 'explorer' | 'detail' | 'worktrees' | null;
+  rightPanel: 'explorer' | 'detail' | 'worktrees' | 'agents' | null;
   /** Content shown in the right panel's Detail tab (Spec 06 §3); null disables it. */
   detail: DetailContent | null;
   /** Whether the settings modal is open (Spec 07 §3). */
@@ -98,7 +98,7 @@ export interface AppStore {
   setModel(model: ModelId): void;
   setRuntimeId(id: string): void;
   setAgentMode(m: AgentMode): void;
-  setRightPanel(p: 'explorer' | 'detail' | 'worktrees' | null): void;
+  setRightPanel(p: 'explorer' | 'detail' | 'worktrees' | 'agents' | null): void;
   /** Opens a tool's detail in the right panel and switches to the Detail tab. */
   setDetail(d: DetailContent | null): void;
   openSettings(): void;
@@ -127,7 +127,7 @@ export function StoreProvider({ ipc, children }: { ipc: IpcClient; children: Rea
   // controle de permissão (control_request), que o runner ainda não trata —
   // sem isso uma tool que pede aprovação trava em "running". Bypass não pergunta.
   const [agentMode, setAgentMode] = useState<AgentMode>('bypass');
-  const [rightPanel, setRightPanel] = useState<'explorer' | 'detail' | 'worktrees' | null>('explorer');
+  const [rightPanel, setRightPanel] = useState<'explorer' | 'detail' | 'worktrees' | 'agents' | null>('explorer');
   const [detail, setDetail] = useState<DetailContent | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<string[]>([]);

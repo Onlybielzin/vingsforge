@@ -165,6 +165,8 @@ export function AppShell(): JSX.Element {
         activeProjectId={store.activeProjectId}
         mode={store.rightPanel}
         detail={store.detail}
+        conversation={store.conversation}
+        {...(store.model ? { model: store.model } : {})}
         onModeChange={store.setRightPanel}
       />
     </div>
