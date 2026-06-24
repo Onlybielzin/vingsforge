@@ -343,6 +343,48 @@ describe('hydrateHistory — replay of persisted blocks (Spec 02 §3 / Spec 08 �
     expect(s.turns).toHaveLength(1);
   });
 
+  it('resolves a tool_result that lives in a LATER message (real persistence shape)', () => {
+    // The runner persists the tool_use (assistant turn) and the tool_result
+    // (user turn) as SEPARATE messages — the card must still close to ok.
+    const s = hydrateHistory(CHAT, [
+      {
+        id: 'm-a',
+        chatId: CHAT,
+        role: 'assistant',
+        blocks: [{ kind: 'tool_use', callId: 'x1', tool: 'bash', input: { command: 'ls' } }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm-u',
+        chatId: CHAT,
+        role: 'user',
+        blocks: [{ kind: 'tool_result', callId: 'x1', isError: false, output: 'README.md' }],
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+    const card = cards(s)[0]!;
+    expect(card.state).toBe('ok');
+    expect(card.output).toBe('README.md');
+  });
+
+  it('closes an orphan tool_use (no result) to a terminal state, never "running"', () => {
+    // An interrupted turn can persist a tool_use with no tool_result. On reopen it
+    // must NOT read as running forever (that drove the Agents panel runaway clock).
+    const s = hydrateHistory(CHAT, [
+      {
+        id: 'm-a',
+        chatId: CHAT,
+        role: 'assistant',
+        blocks: [{ kind: 'tool_use', callId: 'orph', tool: 'Task', input: { description: 'x' } }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const card = cards(s)[0]!;
+    expect(['ok', 'error']).toContain(card.state);
+    expect(card.state).not.toBe('running');
+    expect(card.state).not.toBe('pending');
+  });
+
   it('hydrated history then live events fold together (replay continuity)', () => {
     const hydrated = hydrateHistory(CHAT, history);
     const s = fold(hydrated, [

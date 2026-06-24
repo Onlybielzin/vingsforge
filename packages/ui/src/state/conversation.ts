@@ -96,7 +96,10 @@ export function hydrateHistory(chatId: string, messages: ChatMessage[]): Convers
       const item = blockToItem(block);
       if (item) items.push(item);
       if (block.kind === 'tool_result') {
-        const card = findCard(items, block.callId);
+        // The matching tool_use lives in an EARLIER message (assistant turn),
+        // not in this user turn's items — so search the whole state too, else no
+        // historical tool ever resolves and they all read as "running".
+        const card = findCardAcrossTurns(state, block.callId) ?? findCard(items, block.callId);
         if (card) {
           card.state = block.isError ? 'error' : 'ok';
           card.output = block.output;
@@ -106,6 +109,17 @@ export function hydrateHistory(chatId: string, messages: ChatMessage[]): Convers
     }
     state.turns.push({ id: msg.id, role: msg.role, items, ...(msg.usage ? { usage: msg.usage } : {}) });
     if (msg.usage) state.sessionUsage = addUsage(state.sessionUsage, msg.usage);
+  }
+  // History is static — every turn already ended. Any tool still in a
+  // non-terminal state is orphaned (its result was never persisted, e.g. an
+  // interrupted turn); mark it terminal so it doesn't show as "running" forever
+  // (and the Agents panel doesn't count it as live with a runaway timer).
+  for (const turn of state.turns) {
+    for (const it of turn.items) {
+      if (it.kind === 'tool' && (it.card.state === 'pending' || it.card.state === 'running' || it.card.state === 'awaiting-permission')) {
+        it.card.state = 'ok';
+      }
+    }
   }
   return state;
 }
