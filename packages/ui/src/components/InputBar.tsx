@@ -172,11 +172,11 @@ interface ModeOption {
   risky?: boolean;
 }
 
+// Bypass-only: o CLI não expõe aprovação interativa por-tool em modo headless,
+// então Plano/Padrão/Edições só fariam o bash/ssh/git voltar "requires approval"
+// sem como aprovar. Deixamos apenas Bypass, que executa de verdade.
 const MODE_OPTIONS: ModeOption[] = [
-  { value: 'plan', label: 'Plano', title: 'Plano — só lê e planeja; não edita nem executa.' },
-  { value: 'default', label: 'Padrão', title: 'Padrão — pede aprovação a cada ação.' },
-  { value: 'acceptEdits', label: 'Edições', title: 'Aceitar edições — aprova edições de arquivo sozinho; pede para bash/comandos.' },
-  { value: 'bypass', label: 'Bypass', title: 'Bypass — aprova tudo automaticamente (cuidado).', risky: true },
+  { value: 'bypass', label: 'Bypass', title: 'Bypass — executa tudo sem pedir aprovação (único modo funcional headless).', risky: true },
 ];
 
 function ModeSelector({

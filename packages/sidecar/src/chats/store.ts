@@ -362,7 +362,7 @@ export class ChatStore implements ChatsAPI {
    * Resolves when the turn ends; EngineEvents arrive on {@link onEvent} as they
    * stream. Throws {@link TurnInProgressError} if a turn is already running.
    */
-  async send(chatId: string, text: string): Promise<void> {
+  async send(chatId: string, text: string, modes?: PermissionModes): Promise<void> {
     const userText = messageTextSchema.parse(text);
     const chat = this.requireChat(chatId);
     if (this.inFlight.has(chatId)) throw new TurnInProgressError(chatId);
@@ -434,7 +434,12 @@ export class ChatStore implements ChatsAPI {
         input.volatileContext = context.volatileContext;
       }
       if (context.policy !== undefined) input.policy = context.policy;
-      if (context.modes !== undefined) input.modes = context.modes;
+      // Per-turn modes from the UI selector (e.g. bypass) take precedence over the
+      // chat's stored context default. This was the bug behind "ssh requires
+      // approval even in Bypass": send() used to ignore the modes argument, so the
+      // runner always fell back to acceptEdits (which gates bash/ssh).
+      const turnModes = modes ?? context.modes;
+      if (turnModes !== undefined) input.modes = turnModes;
 
       try {
         await this.deps.runEngineTurn(input, (event) => this.emit(event));

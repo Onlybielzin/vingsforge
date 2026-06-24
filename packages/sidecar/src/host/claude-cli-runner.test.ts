@@ -336,7 +336,9 @@ describe('mapPermissionMode', () => {
     expect(mapPermissionMode({ readOnly: true })).toBe('plan');
     expect(mapPermissionMode({ autoApprove: true })).toBe('bypassPermissions');
     expect(mapPermissionMode({ acceptEdits: true })).toBe('acceptEdits');
-    expect(mapPermissionMode(undefined)).toBe('acceptEdits');
-    expect(mapPermissionMode({})).toBe('acceptEdits');
+    // Bypass-only app: undefined / empty modes default to bypassPermissions so
+    // bash/ssh/git-push actually run (headless can't present an Allow prompt).
+    expect(mapPermissionMode(undefined)).toBe('bypassPermissions');
+    expect(mapPermissionMode({})).toBe('bypassPermissions');
   });
 });

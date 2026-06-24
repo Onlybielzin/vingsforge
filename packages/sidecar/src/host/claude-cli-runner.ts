@@ -618,14 +618,15 @@ function handleResult(event: ClaudeStreamEvent, ctx: HandleCtx): HandleOutcome {
 export function mapPermissionMode(
   modes: EngineTurnInput['modes'],
 ): ClaudePermissionMode {
-  // TODO(perms): interactive per-tool gating via `--permission-prompt-tool`
-  // is the next step; v1 maps quick-modes to the CLI's coarse modes.
+  // The CLI does NOT expose interactive per-tool approval in headless `-p` mode
+  // (no --permission-prompt-tool callback fires; the stdin control protocol does
+  // not gate tools). So acceptEdits/default would silently DENY bash/ssh/git-push
+  // with "requires approval" and we cannot present an Allow prompt. The app is
+  // therefore bypass-only: anything that isn't explicitly read-only maps to
+  // bypassPermissions so commands actually run.
   if (modes?.readOnly) return 'plan';
-  if (modes?.autoApprove) return 'bypassPermissions';
   if (modes?.acceptEdits) return 'acceptEdits';
-  // v1 default: auto-approve edits rather than block the turn waiting on a gate
-  // we don't yet wire interactively.
-  return 'acceptEdits';
+  return 'bypassPermissions';
 }
 
 /** Build the child env, applying the auth mode (NEVER logged). */
