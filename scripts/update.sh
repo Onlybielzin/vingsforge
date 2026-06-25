@@ -38,8 +38,11 @@ git pull --ff-only
 log "pnpm install"
 pnpm install
 
-log "build sidecar"
-pnpm --filter @vingsforge/sidecar build
+log "build workspace packages (shared, persistence, sidecar, ui)"
+# Build all packages in topological order: the sidecar's tsc resolves
+# @vingsforge/shared + @vingsforge/persistence from their built dist, so on a
+# fresh checkout those must compile first. (`pnpm -r` honours dep order.)
+pnpm -r --filter "./packages/**" run build
 
 log "deploy sidecar (prod, hoisted) -> ${DEPLOY_DIR}"
 pnpm --filter @vingsforge/sidecar deploy --prod --legacy --node-linker=hoisted "${DEPLOY_DIR}"

@@ -56,7 +56,7 @@ O shell Tauri (Rust) só sobe e supervisiona o sidecar e injeta um token de auth
 
 ```sh
 pnpm install
-pnpm --filter @vingsforge/sidecar build
+pnpm build   # compila shared, persistence, sidecar e ui em ordem
 cd apps/desktop && pnpm tauri dev
 ```
 
@@ -64,7 +64,7 @@ cd apps/desktop && pnpm tauri dev
 
 ```sh
 # empacota o sidecar self-contained nos resources e gera o bundle
-pnpm --filter @vingsforge/sidecar build
+pnpm build   # compila shared, persistence, sidecar e ui em ordem
 pnpm --filter @vingsforge/sidecar deploy --prod --legacy --node-linker=hoisted /tmp/sidecar-hoisted
 cp -r /tmp/sidecar-hoisted apps/desktop/src-tauri/sidecar && rm -rf apps/desktop/src-tauri/sidecar/node_modules/.bin
 cd apps/desktop && pnpm tauri build
