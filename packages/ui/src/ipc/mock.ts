@@ -553,7 +553,7 @@ export function createMockIpcClient(): IpcClient {
           behind: 2,
           current: 'a1b2c3d',
           latest: 'f0e9d8c',
-          repoDir: settings.repoDir ?? '/home/vings/Área de trabalho/projetos/claude tools',
+          repoDir: settings.repoDir ?? '/home/vings/vingsforge',
           available: true,
         };
       },

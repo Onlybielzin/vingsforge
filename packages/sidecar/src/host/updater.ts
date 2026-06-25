@@ -3,8 +3,9 @@
  *
  * `status()` probes the VingsForge checkout against its upstream with read-only
  * git plumbing (`fetch`, `rev-list --count`, `rev-parse --short`); `run()` spawns
- * the build/install pipeline in `scripts/update.sh` and streams its stdout/stderr
- * to the UI as `update.log` / `update.done` engine events.
+ * the build/install pipeline in `scripts/update.sh` (rebuild + install the
+ * AppImage on Omarchy/Arch) and streams its stdout/stderr to the UI as
+ * `update.log` / `update.done` engine events.
  *
  * SECURITY: the repo directory is the ONLY external input and it comes from
  * settings, not from a chat. It is validated (absolute path, exists, contains a
@@ -22,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import type { EngineEvent, UpdateStatus } from '@vingsforge/shared';
 
 /** Built-in default checkout used when Settings `repoDir` is empty. */
-export const DEFAULT_REPO_DIR = '/home/vings/Área de trabalho/projetos/claude tools';
+export const DEFAULT_REPO_DIR = '/home/vings/vingsforge';
 
 /**
  * Parse the "behind" commit count from the raw stdout of

@@ -29,15 +29,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb"],
+    "targets": ["appimage"],
     "category": "DeveloperTool",
     "shortDescription": "Claude-powered coding agent",
-    "longDescription": "VingsForge — desktop coding agent powered by Claude, Linux-first (Tauri 2 + Node sidecar).",
-    "linux": {
-      "deb": {
-        "depends": []
-      }
-    },
+    "longDescription": "VingsForge — desktop coding agent powered by Claude, Linux-first (Tauri 2 + Node sidecar), packaged as a distro-agnostic AppImage for Omarchy / Arch.",
     "resources": ["sidecar/**/*"],
     "icon": [
       "icons/32x32.png",

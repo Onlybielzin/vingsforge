@@ -5,8 +5,8 @@
  *    the checkout is behind upstream; its button opens the modal.
  *  - {@link UpdateModal} — runs `update.run()` and streams the build/install logs
  *    (update.log / update.done events) into a monospaced area with a live phase
- *    indicator. On success it tells the user the new .deb was installed and they
- *    may reopen the app.
+ *    indicator. On success it tells the user the new AppImage was installed and
+ *    they may reopen the app.
  *
  * All event folding is delegated to the pure {@link reduceUpdate} reducer so this
  * component stays presentational. No emoji — status uses the icon set.

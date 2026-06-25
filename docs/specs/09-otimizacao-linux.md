@@ -2,14 +2,14 @@
 
 > Depende de: [00 Visão Geral](00-visao-geral.md)
 > Status: rascunho
-> Alvo primário: Linux desktop (dev em Mint 22.3 / Cinnamon / Wayland ou X11)
+> Alvo primário: Linux desktop (dev em Omarchy / Arch / Hyprland — Wayland; compatível com X11)
 
 ## 1. Objetivo
 
 O app deve ser **o mais otimizado possível para Linux**: leve em RAM/CPU, binário pequeno,
 inicialização rápida, integração nativa (tray, notificações, atalhos) e empacotamento idiomático
-(AppImage / Flatpak / .deb). Esta spec define as decisões que tornam isso possível e **revisa a
-escolha de shell** da Visão Geral.
+(AppImage como artefato principal, Flatpak opcional). Esta spec define as decisões que tornam isso
+possível e **revisa a escolha de shell** da Visão Geral.
 
 ## 2. Decisão de shell: Tauri (recomendado) vs Electron
 
@@ -57,19 +57,22 @@ Trade-off aceito: o motor (Spec 03), escrito em TypeScript com `@anthropic-ai/sd
 
 ## 4. Empacotamento e distribuição (Linux)
 
-- **AppImage**: principal — roda em qualquer distro sem instalar.
-- **.deb**: para Mint/Ubuntu/Debian (alvo do usuário).
+- **AppImage**: principal — roda em qualquer distro sem instalar (alvo do usuário: Omarchy / Arch). O updater
+  o instala em `~/.local/bin` + `.desktop` em `~/.local/share/applications` (sem sudo, sem gerenciador de pacotes).
 - **Flatpak**: opcional, para sandbox e loja; cuidado com permissões de FS (workspace precisa de acesso).
+- **Pacote pacman/AUR**: futuro, se quiser integração nativa no Arch; não necessário enquanto o AppImage cobre o alvo.
 - Sidecar Node empacotado como binário único (ex.: `bun build --compile`, `pkg` ou Node SEA) para não exigir Node instalado.
 - Assinatura/checksum dos artefatos.
 
 ## 5. Integração nativa Linux
 
-- **Tray icon** (Cinnamon/GNOME/KDE) via Tauri; ações rápidas (novo chat, abrir, mostrar/ocultar).
+- **Tray icon** via Tauri (no Hyprland aparece pelo módulo `tray` do waybar; precisa de `libappindicator-gtk3`); ações rápidas (novo chat, abrir, mostrar/ocultar).
 - **Notificações** nativas (turno concluído, permissão pendente, VPS caiu).
 - **Atalho global** opcional para abrir/focar a janela.
 - **File picker** nativo (portal XDG quando em Flatpak).
-- **Wayland e X11**: testar nos dois; respeitar escala/HiDPI; sem assumir X11.
+- **Wayland (Hyprland) e X11**: alvo é Hyprland/Wayland. O WebKitGTK renderiza janela branca sob vários
+  compositores Wayland → o app força `WEBKIT_DISABLE_DMABUF_RENDERER=1` e `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+  no `main.rs` (e no `.desktop`). Respeitar escala/HiDPI; sem assumir X11.
 - **Tema do sistema**: detectar preferência dark/light do desktop (XDG settings portal) e aplicar.
 
 ## 6. Orçamento de performance (metas v1)
@@ -103,7 +106,7 @@ Trade-off aceito: o motor (Spec 03), escrito em TypeScript com `@anthropic-ai/sd
 
 ## 10. Critérios de aceite
 
-1. AppImage e .deb gerados e rodando em Mint/Cinnamon (Wayland e X11).
+1. AppImage gerado e rodando em Omarchy / Arch + Hyprland (Wayland) e em X11.
 2. Cold start < 1 s e RAM idle < 150 MB nos alvos.
 3. Tray, notificações e tema do sistema funcionando nativamente.
 4. Mesmo binário de sidecar roda como motor local e como daemon na VPS.

@@ -32,7 +32,7 @@ ou **remotamente em outras VPS**.
 - **Modelo padrão:** `claude-opus-4-8`. Configurável por projeto/chat. Pensamento adaptativo (`thinking: { type: "adaptive" }`), `effort` configurável.
 - **Persistência:** SQLite (metadados + histórico) + arquivos no disco (workspace), em caminhos XDG. Ver [Spec 08](08-persistencia.md).
 - **Remoto:** daemon headless (o mesmo sidecar) rodando na VPS, acessível por túnel SSH + WebSocket de eventos.
-- **Empacotamento:** AppImage + .deb (Mint/Ubuntu), Flatpak opcional. Ver [Spec 09](09-otimizacao-linux.md).
+- **Empacotamento:** AppImage distro-agnóstico (alvo Omarchy / Arch + Hyprland), Flatpak opcional. Ver [Spec 09](09-otimizacao-linux.md).
 
 > Estas escolhas são o ponto de partida. Cada uma pode ser trocada sem reescrever as outras specs,
 > desde que os contratos (modelo de dados, eventos do motor) sejam mantidos.
